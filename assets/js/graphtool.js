@@ -42,7 +42,7 @@ doc.html(`
       <div class="tools collapseTools">
         <div class="copy-url">
           <button id="copy-url">Copy URL</button>
-          <button id="download-faux">Screenshot</button>
+          <button id="download-faux">Save</button>
           <button id="avg-all">Average All</button>
         </div>
 
@@ -84,8 +84,7 @@ doc.html(`
           <button id="inspector"><span>╞</span> inspect</button>
           <button id="calcBtn"><span>∫</span> calculate</button>
           <button id="label"><span>▭</span> label</button>
-          <button id="download"><span><u>⇩</u></span> screenshot</button>
-          <button id="recolor"><span>○</span> recolor</button>
+          <button id="download"><span><u>⇩</u></span> save</button>
         </div>
 
         <div class="expand-collapse">
@@ -378,11 +377,9 @@ defs.append("filter").attr("id","blur").attr("filterUnits","userSpaceOnUse")
 
 let haloFilter = defs.append("filter")
     .attr("id", "inspect-halo")
-    .attrs({ x: "-50%", y: "-50%", width: "200%", height: "200%" });
+    .attrs({ x: "-20%", y: "-20%", width: "140%", height: "140%" });
 haloFilter.append("feDropShadow")
-    .attrs({ dx: 0, dy: 0, stdDeviation: 4, "flood-color": "#000000", "flood-opacity": 1.0 });
-haloFilter.append("feDropShadow")
-    .attrs({ dx: 0, dy: 0, stdDeviation: 2, "flood-color": "#000000", "flood-opacity": 1.0 });
+    .attrs({ dx: 0, dy: 1, stdDeviation: 2, "flood-color": "black", "flood-opacity": 0.15 });
 let yAxis = d3.axisLeft(y).tickSize(W).tickSizeOuter(0).tickPadding(1);
 function fmtY(ya) {
     let d = y.domain(),
@@ -403,6 +400,8 @@ function fmtY(ya) {
           };
       });
     ya.selectAll(".tick text")
+      .attr("fill","var(--graph-axis-text)")
+      .attr("opacity", "0.95")
       .attr("text-anchor","start")
       .attr("x",-W+3)
       .attr("dy",-2)
@@ -413,7 +412,7 @@ let yAxisObj = gr.append("g")
     .call(fmtY);
 yAxisObj.insert("text")
     .attr("transform","rotate(-90)")
-    .attr("fill","currentColor")
+    .attr("fill","var(--graph-axis-text)")
     .attr("text-anchor","end")
     .attr("y",-W-2).attr("x",-pad.t)
     .text("dB");
@@ -436,17 +435,18 @@ function fmtX(xa) {
     xa.selectAll(".tick line")
       .attr("y1", 10)
       .attr("y2", 312)
-      .attr("stroke", "#333")
+      .attr("stroke", "var(--graph-grid-line)")
       .attr("stroke-width", (_,i) => tickThickness[getTickType(i)])
-      .attr("opacity", "0.6");
+      .attr("opacity", "0.7");
+    xa.selectAll(".tick text")
+      .attr("fill", "var(--graph-axis-text)")
+      .attr("opacity", "0.95");
     xa.selectAll(".tick text").filter((_,i) => tickPattern[i] === 0)
       .attr("font-size","92%")
-      .attr("font-weight","lighter")
-      .attr("opacity", "0.5");
+      .attr("font-weight","normal");
     xa.selectAll(".tick text").filter((_,i) => tickPattern[i] != 0)
-      //.attr("font-size","92%")
-      .attr("font-weight","lighter")
-      //.attr("opacity", "0.9");
+      .attr("font-size","95%")
+      .attr("font-weight","bold");
     xa.select(".tick:last-of-type text")
       .attr("dx",-5)
       .text("20kHz");
@@ -689,7 +689,8 @@ function drawLabels() {
     let g = getLabelsLayer().selectAll(".lineLabel").data(bcurves)
         .join("g").attr("class","lineLabel").attr("opacity", 0);
     let t = g.append("text")
-        .attrs({x:0, y:0, fill:c=>getTooltipColor(c)})
+        .attrs({x:0, y:0})
+        .style("fill", c => (c.isTarget || (c.p && c.p.isTarget)) ? "var(--graph-axis-text)" : getTooltipColor(c).toString())
         .style("font-size", fontSize + "px")
         .text(c=>c.id);
 
@@ -913,9 +914,46 @@ function saveGraph(ext) {
     gpath.selectAll("path").classed("highlight",false);
     drawLabels();
     showControls(false);
+
+    let svgNode = document.querySelector("#fr-graph") || gr.node();
+    let bodyStyle = getComputedStyle(document.body);
+    let graphStyle = getComputedStyle(svgNode);
+    let bgColor = graphStyle.backgroundColor && graphStyle.backgroundColor !== "rgba(0, 0, 0, 0)" 
+        ? graphStyle.backgroundColor 
+        : bodyStyle.getPropertyValue("--background-color-graph").trim() || "#ffffff";
+
+    let activeThemeClass = document.body.className || "";
+    let originalSvgClass = svgNode.getAttribute("class") || "";
+    svgNode.setAttribute("class", (originalSvgClass + " " + activeThemeClass).trim());
+
+    const themeProps = [
+        "--background-color-graph",
+        "--font-color-primary",
+        "--graph-axis-text",
+        "--graph-grid-line",
+        "--inspector-bg",
+        "--inspector-border",
+        "--inspector-text",
+        "--accent-color",
+        "--accent-color-contrast"
+    ];
+    themeProps.forEach(prop => {
+        let val = bodyStyle.getPropertyValue(prop).trim();
+        if (val) svgNode.style.setProperty(prop, val);
+    });
+
     let filename = getDynamicFilename(ext);
-    fn(gr.node(), filename, {scale:3})
-        .then(()=>showControls(true));
+    fn(svgNode, filename, {
+        scale: 3,
+        backgroundColor: bgColor
+    }).then(() => {
+        showControls(true);
+        svgNode.setAttribute("class", originalSvgClass);
+    }).catch(err => {
+        showControls(true);
+        svgNode.setAttribute("class", originalSvgClass);
+        console.error("Error saving graph:", err);
+    });
     
     // Analytics event
     if (analyticsEnabled) { pushEventTag("clicked_download", targetWindow); }
@@ -2415,18 +2453,7 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         brandSel.style("display", b => bl.indexOf(b)!==-1?null:"none");
     });
 
-    doc.select("#recolor").on("click", function () {
-        allPhones.forEach(p => { if (!p.isTarget) { delete p.id; } });
-        phoneNumber = 0; nextPN = null;
-        activePhones.forEach(p => {
-            if (!p.isTarget) {
-                p.id = getPhoneNumber();
-                p.hexColor = hclToHex(getCurveColor(p.id,0));
-            }
-        });
-        colorPhones();
-    });
-    
+
     doc.select("#theme").on("click", function () {
         themeChooser("change");
     });
@@ -2520,13 +2547,13 @@ let graphInteract = imm => function () {
 
         // Update text colors and model name
         tt.select(".insp_name")
-            .attr("fill", d => getTooltipColor(d))
+            .style("fill", d => (d.isTarget || (d.p && d.p.isTarget)) ? "var(--graph-axis-text)" : getTooltipColor(d).toString())
             .text(d => d.id);
 
         tt.select(".insp_val").selectAll("text")
-            .attr("fill", function() {
+            .style("fill", function() {
                 let parentDatum = d3.select(this.parentNode.parentNode).datum();
-                return getTooltipColor(parentDatum);
+                return (parentDatum.isTarget || (parentDatum.p && parentDatum.p.isTarget)) ? "var(--graph-axis-text)" : getTooltipColor(parentDatum).toString();
             });
 
         // Update dB numbers

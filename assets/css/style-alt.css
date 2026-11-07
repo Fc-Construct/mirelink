@@ -102,28 +102,30 @@ input {
 Graph colors *****/
 
 svg text {
-    color: var(--background-color-contrast-more);
-    color: var(--font-color-primary);
+    fill: var(--graph-axis-text, var(--font-color-primary));
     font-family: var(--font-secondary);
+}
+
+.tick text {
+    fill: var(--graph-axis-text, var(--font-color-primary)) !important;
+}
+
+.tick line {
+    stroke: var(--graph-grid-line, var(--background-color-contrast-more));
 }
 
 svg text.graph-name {
     fill: var(--font-color-primary);
-    
     font-family: var(--font-primary);
     font-weight: 700;
 }
 
 svg line {
-    stroke: var(--background-color-contrast-more);
+    stroke: var(--graph-grid-line, var(--background-color-contrast-more));
 }
 
 g.lineLabel rect {
-    fill: var(--background-color-graph, #141821);
-    filter: none;
-    opacity: 0.88;
-    rx: 2px;
-    ry: 2px;
+    display: none !important;
 }
 
 g.lineLabel text {
@@ -165,8 +167,12 @@ g.inspector rect {
 }
 
 g.inspectLabel rect {
-    fill: var(--background-color-graph, #141821);
-    opacity: 0.92;
+    fill: var(--inspector-bg, var(--background-color-graph));
+    stroke: var(--inspector-border, var(--background-color-contrast-more));
+    stroke-width: 1px;
+    opacity: 0.95;
+    rx: 4px;
+    ry: 4px;
     pointer-events: none !important;
 }
 
@@ -176,7 +182,8 @@ g.inspectLabel text {
 }
 
 text.insp_dB {
-    fill: var(--background-color-contrast-more);
+    fill: var(--graph-axis-text, var(--font-color-primary));
+    font-weight: 700;
 }
 
 /* Animating graph stroke */

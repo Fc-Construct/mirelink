@@ -336,13 +336,12 @@ function addKey(s) {
     m.append("rect").attrs({"class":"keyMask", x:p=>channelbox_x(p.avg), y:-12, width:120, height:24, fill:"url(#blgrad)"});
     let t = s.append("g");
     t.append("path")
-        .attr("stroke", p => notMultichannel(p) ? getColor_AC({p:p})
-                                                : "url(#chgrad"+p.id+")");
+        .attr("stroke", p => getColor_AC({p:p}));
     t.selectAll().data(p=>p.isTarget?[]:LR)
         .join("text").attr("class","keyCLabel")
         .attrs({x:14+keyExt, y:(_,i)=>12*(i-(LR.length-1)/2),
                 dy:"0.32em", "text-anchor":"start", "font-size":10.5})
-        .text(t => t === "L" ? "- - L" : "─ R");
+        .text(t => t === "L" ? "L" : "R");
     t.filter(p=>p.isTarget).append("text")
         .attrs(keyExt?{x:7,y:6,"text-anchor":"middle"}
                      :{x:17,y:0,"text-anchor":"start"})
@@ -376,7 +375,7 @@ function addKey(s) {
     o.append("rect").attrs({x:0,y:-6,width:30,height:12,opacity:0});
     o.append("text").attrs({x:0, y:0, dy:"0.28em", "text-anchor":"start",
                             "font-size":7.5 })
-        .text("only");
+        .text("ONLY");
     s.append("text").attr("class","imbalance")
         .attrs({x:8,y:0,dy:"0.35em","font-size":10.5})
         .text("!");
@@ -463,7 +462,7 @@ function addModel(t) {
                 .style("left",(w+5)+"px")
                 .style("display",v=>v.active?"none":null);
             [d,c].forEach(e=>e.transition().style("top",(_,i)=>i*1.3+"em"));
-            d.filter(v=>!v.active).on("mousedown", v => Object.assign(p,v));
+            d.filter(v=>!v.active).on("mousedown", v => showVariant(q, v));
             c.on("mousedown", function (v) {
                 showVariant(q, v);
             });

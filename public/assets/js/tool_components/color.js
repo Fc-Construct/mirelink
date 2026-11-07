@@ -56,21 +56,24 @@ function getCurveColor(id, o, hex, curveObj) {
         return d3.hcl(360, 5, 66);
     }
 
-    if (hex && (!curveObj || (!curveObj.channel && curveObj.chIdx === undefined))) {
-        let rgb = d3.rgb(hex);
-        let hcl = d3.hcl(rgb);
-        return d3.hcl(hcl.h, hcl.c, hcl.l);
-    }
+    let h, cVal, lVal;
 
-    let baseIdx = p ? getPhoneBaseHueIndex(p) : ((id !== undefined && !isNaN(id)) ? Math.abs(id) % curatedPalette.length : 0);
-    let baseColor = curatedPalette[baseIdx];
-    let h = baseColor.h;
-    let cVal = baseColor.c;
-    let lVal = baseColor.l;
+    let customHex = hex || (p && p.hexColor);
+    if (customHex) {
+        let hcl = d3.hcl(d3.rgb(customHex));
+        h = hcl.h;
+        cVal = isNaN(hcl.c) ? 0 : hcl.c;
+        lVal = isNaN(hcl.l) ? 68 : hcl.l;
+    } else {
+        let baseIdx = p ? getPhoneBaseHueIndex(p) : ((id !== undefined && !isNaN(id)) ? Math.abs(id) % curatedPalette.length : 0);
+        let baseColor = curatedPalette[baseIdx];
+        h = baseColor.h;
+        cVal = baseColor.c;
+        lVal = baseColor.l;
+    }
 
     if (curveObj) {
         // Seating shade differentiation:
-        // Individual seatings (e.g. R1, R2, R3) share the model's base hue but use subtle lightness steps
         let sIdx = curveObj.sIdx;
         let sCount = curveObj.sCount || 3;
         if (sIdx !== undefined && !isNaN(sIdx) && sCount > 1) {

@@ -261,9 +261,11 @@ function augmentInit() {
 augmentInit();
 
 function augmentList(phone) {
-    let phoneName = phone.fullName,
-        phoneListItem = document.querySelector('div[name="'+ phoneName +'"]'),
-        phoneListItemAugmented = phoneListItem.getAttribute('data-augment'),
+    if (!phone) return;
+    let phoneName = phone.fullName || phone.dispName || phone.phone;
+    let phoneListItem = phoneName ? document.querySelector('div[name="'+ phoneName +'"]') : null;
+    if (!phoneListItem) return;
+    let phoneListItemAugmented = phoneListItem.getAttribute('data-augment'),
         reviewScore = phone.reviewScore ? phone.reviewScore.length === 1 && typeof parseInt(phone.reviewScore) === 'number' ? parseInt(phone.reviewScore) : phone.reviewScore : false,
         reviewStars = !reviewScore.length && reviewScore >= 0 && reviewScore <= 5 ? true : false,
         reviewLink = phone.reviewLink,

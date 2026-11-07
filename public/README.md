@@ -6,150 +6,88 @@ An open-canal **MIRE (Microphone-in-Real-Ear)** frequency response database and 
 
 ## 1. Project Overview & Vision
 
-This application is customized specifically for **open-canal MIRE headphone acoustic measurements**, eliminating artificial coupler assumptions, stripping third-party ad injection, and introducing dedicated seating, channel, and variant controls.
+This application is customized specifically for **open-canal MIRE headphone acoustic measurements**, modifying coupler-focused systems and introducing dedicated seating, channel, and variant controls.
 
-### The MIRE Acoustic Paradigm
-- **Microphone-in-Real-Ear (MIRE)**: Measurements are captured using miniature probe microphones placed at the entrance of Fc-Construct's unoccluded ear canal while wearing over-ear headphones.
-- **Natural Anatomical HRTF**: Because sound naturally interacts with the human head, pinna, and concha during testing, measured responses incorporate Fc-Construct's real Head-Related Transfer Function (HRTF).
-- **The Reference View & Custom Tilt Engine**:
-  - **`10 dB downwards tilt`**: Applies a $-1\text{ dB/Octave}$ downwards slope ($+5\text{ dB}$ to $-5\text{ dB}$ from 20 Hz to 20 kHz). This is the **default view on initial page load**, reflecting Harman research preference averages.
-  - **`Fc-Construct DF-HRTF`**: The flat (0 dB) baseline representing Fc-Construct's uncompensated diffuse-field/free-field HRTF measurement.
-  - **Dynamic `CUSTOM` Reference State**: Modifying preference adjustments (Tilt, Bass shelf, Treble, or Ear Gain) automatically shifts the reference view to **`CUSTOM`**, rendering a dedicated `CUSTOM` box in the Reference View panel and displaying parameters on the graph.
-- **Acoustic Seating Variance**:
-  - Over-ear headphones exhibit placement and pad leakage variance. Headphones are measured across multiple distinct seatings (e.g. 3 seatings per ear: `L1..L3` and `R1..R3`) as well as pad-seal variations (e.g. wearing eyeglasses vs clean seal).
+* **Microphone-in-Real-Ear (MIRE)**: Captured using miniature probe microphones placed at the entrance of Fc-Construct's unoccluded ear canal while wearing over-ear headphones, incorporating real Head-Related Transfer Functions (HRTF).
+* **Seating Variance**: Accounts for pad seal and placement variations by measuring multiple distinct seatings per ear (`L1..L3`, `R1..R3`) as well as seal variations (e.g., eyeglasses vs. clean seal).
 
 ---
 
-## 2. Key Architecture & Visualization Systems
+## 2. Key Upgrades & Changes Over Original Squiglink
 
-### A. Color-Blind Safe Palette & Consistent Anchor Color Architecture
-- **Curated Color-Blind Safe HCL Palette**: Built with 12 perceptually uniform HCL hues specifically calibrated to avoid red-green confusion, providing high legibility for all color vision types.
-- **Anchor Color Consistency**:
-  - **Primary/Anchor Model**: The first active headphone on screen is always assigned **Index 0 (Cobalt Blue)**.
-  - **Comparator Models**: Additional headphones receive subsequent colors in a strict, high-contrast sequence (Orange, Sea Green, Violet, Magenta, Teal, etc.).
-  - **Screenshot Continuity**: Deselecting headphones allows remaining models to dynamically retain their stable slot position, keeping colors consistent across comparative screenshots.
+### 1. Color-Blind Safe Color Palette and Consistency
+* **Color-Blind Safe HCL Palette**: Built with 12 perceptually uniform HCL hues calibrated to avoid red-green confusion and ensure high legibility.
+* **Anchor Color Stability**: The primary active headphone is always assigned Index 0 (Cobalt Blue). Remaining models receive a fixed, high-contrast sequence and dynamically retain their assigned color slots when models are deselected.
+* **Distinct Channel Lines**: Right channel is styled as a solid line (`─ R`) and Left channel as a dashed line (`- - L`), matched with explicit legend prefixes. Reference targets use fine dotted lines (`2, 4` at 55% opacity) to prevent clashing with left-channel dashes.
 
-### B. Channel Line Styles & Visual Legend
-- **Right Channel (`R`)**: Displayed as a **solid line** (`─ R`) for maximum readability.
-- **Left Channel (`L`)**: Displayed as a **dashed line** (`- - L`).
-- **Legend Prefixes**: Both the graph legend and the bottom comparison table explicitly display **`- - L`** and **`─ R`** prefixes next to channel text.
-- **Non-Clashing Target/Tilt Lines**: Reference targets and preference tilt bounds are styled as **fine dotted lines** (`2, 4` at 55% opacity) to prevent visual confusion with headphone left channels.
+### 2. Caching and Pre-loading
+* **In-Memory Caching**: Parsed curve data and raw text files are cached in memory (`rawFileCache` and `parsedResultCache`) for zero-latency re-fetches.
+* **Idle Pre-loading**: An idle-time background prefetcher (`requestIdleCallback`) loads remaining library items during browser idle time for instant model switching.
 
-### C. Calculate Band Area Tool (`∫ calculate`)
-- **Interactive Frequency Span Selection**: Click the **`∫ calculate`** button in the top control bar to activate the interactive band area tool. Drag across any region of the frequency graph (e.g. 250 Hz – 508 Hz or 1.5 kHz – 4.1 kHz) to highlight a specific acoustic region.
-- **Selection Style**: Renders a clean, neutral light grey selection box (`rgba(255, 255, 255, 0.08)` fill) bounded by a thin solid line (`1px` neutral border).
-- **Log-Weighted Octave Average Calculation**: Computes the log-weighted average decibel difference across the highlighted frequency band between the active curves (e.g. Left vs Right channel matching or headphone comparison).
-- **Subtle Floating Pop-Up Note**: Displays a compact pop-up note badge showing the selected frequency range in Hz/kHz, octave span, and the exact average decibel difference (e.g. `250 Hz – 508 Hz (1.02 Oct)` and `Avg Diff: 0.12 dB`).
+### 3. Parser
+* **Single Source of Truth**: Data is managed via raw `.txt` files dropped into `/data/`. An automated GitHub Action script (`update_phonebook.py`) parses files and updates `phone_book.json`.
+* **Channel & Seating Stemming**: Automatically detects channels (`L` / `R`) and seating numbers (`1..9`) at the end of filenames.
+* **Multi-Word Brand & Variant Discovery**: Handles multi-word brand names (`Audio Technica`, `Dan Clark Audio`, etc.) and extracts variants dynamically using parenthetical tags `(...)` or keyword tokens (e.g. `G` $\rightarrow$ `Glasses`).
 
-### D. Technical Data Pipeline
-```
-                               ┌──────────────────────────────────────────┐
-                               │           /data/ DIRECTORY               │
-                               │   (Your Single Source of Truth on GitHub)│
-                               └────────────────────┬─────────────────────┘
-                                                    │
-                                                    ▼
-                                       ┌──────────────────────────┐
-                                       │   update_phonebook.py    │
-                                       │ (Automated Python Script)│
-                                       └────────────┬─────────────┘
-                                                    │
-                                ┌───────────────────┴───────────────────┐
-                                ▼                                       ▼
-                     ┌─────────────────────┐                 ┌─────────────────────┐
-                     │ data/phone_book.json│                 │ /public/data/ Mirror│
-                     │  (Production Site)  │                 │  (AI Studio Preview)│
-                     └─────────────────────┘                 └─────────────────────┘
-```
+### 4. Smoothing Detection
+* **Header Metadata Inspection**: Reads header comments in exported REW text files upon load.
+* **Warning Indicators**: Non-standard or missing smoothing (e.g., `1/12 octave` or `None`) displays a subtle `⚠️` warning badge with a descriptive tooltip, while standard `1/6 octave` acoustic measurements remain badge-free.
 
-1. **`/data/` Single Source of Truth**: You only drop `.txt` files into `/data/`. A GitHub Action automatically triggers on every commit, runs `update_phonebook.py`, and publishes the updated `phone_book.json`.
-2. **100% Dynamic Variant Discovery**: Variants are extracted dynamically by identifying common model prefixes and extracting remaining tokens (e.g., `G` or `Glasses` $\rightarrow$ `Glasses`, `Vienna` $\rightarrow$ `Vienna`).
-3. **Smoothing Metadata Detector**: Header metadata is parsed upon load. Non-standard or missing REW smoothing (e.g. `1/12 octave` or `None`) displays a subtle `⚠️` warning badge with a tooltip, while standard 1/6-octave acoustic measurements remain clean.
-4. **Performance & RAM Caching**: Parsed curve arrays and raw text files are cached in memory. An idle-time background prefetcher (`requestIdleCallback`) pre-loads remaining library items during idle browser time for instantaneous switching.
+### 5. Dynamic Custom Reference Views
+* **Live Preference Tuning**: Adjusting Tilt (dB/Oct), Bass Shelf, Treble, or Ear Gain dynamically generates a custom reference target.
+* **Custom Reference View Pills**: Save custom target configurations as numbered presets (`CUSTOM 1`, `CUSTOM 2`), double-click to rename in-place, or delete custom target pills.
+* **Presets**: Defaults to `10 dB downwards tilt` (-1 dB/Oct slope) on load, with quick toggles to flat `Fc-Construct DF-HRTF` or preference bounds.
 
----
+### 6. Calculate Functionality
+* **Band Selection Brush**: Click the **`∫ calculate`** tool button and drag across any frequency range ($f_0 \rightarrow f_1$) on the graph canvas.
+* **Log-Weighted Difference**: Computes the log-frequency-weighted average decibel difference (or mean level) between selected channels/models across the chosen band (e.g. `Avg Diff: 1.45 dB` over `200 Hz – 1.0 kHz`).
+* **Precise Graph Bounding**: Calculate selection brush is structurally constrained between the top graph grid line (`pad.t + 10`) and bottom frame (`pad.t + H`), preventing overflow into the header.
 
-## 3. How the Parser Works (Reference Guide)
+### 7. Adaptive Multi-Column Label Layout & Logarithmic Tilt Math
+* **Dynamic Multi-Column Label Stacking**: Automatically stacks active model curves into neat columns (up to 8 models in the bottom-left zone; 9+ models spilling into the top-left open whitespace zone). This allows for up to 16 models to be labeled nicely.
+* **Precise Text & Width Measurement**: Computes rendered text bounding box widths (`getBBox().width + 14px`) dynamically to prevent overlaps or awkward gaps, with automatic font-size downscaling (`12.5px` $\rightarrow$ `11px` $\rightarrow$ `10px`) for large model counts.
+* **SVG Layer Isolation**: Separates static curve labels (`g.labels-layer`) from interactive overlays (`g.tools-layer`), entirely eliminating label jumping when toggling Inspect or Calculate tools.
+* **Logarithmic Tilt Representation Note**: The $-1\text{ dB/Octave}$ tilt uses logarithmic scaling (`tilt * Math.log2(frequency / referenceFrequency)`). While a symmetric $\pm 5\text{ dB}$ split between 20 Hz and 20 kHz requires the reference pivot to be at the geometric mean ($f_{\text{geometric}} = \sqrt{20 \times 20,000} \approx 632.46\text{ Hz}$), the target curves anchor at the industry-standard **1 kHz (1000 Hz)** reference point, yielding $+5.64\text{ dB}$ at 20 Hz and $-4.32\text{ dB}$ at 20 kHz.
 
-Understanding how `update_phonebook.py` processes filenames will help you upload data cleanly so headphones appear with the exact desired names.
+### 8. Inspect Tool Graph Box Bounding & Gaussian Halo
+* **Graph Box Bounding Math**: Computes the exact rendered SVG bounding box (`getBBox()`) of active inspection labels and clamps the container's horizontal position (`dx`) between graph padding boundaries (`pad.l` and `pad.l + W`). As the cursor line moves all the way to 20 Hz or 20 kHz, the inspection text block locks cleanly against the left or right edge without overflowing the graph box.
+* **Diffused Dark Gaussian Halo**: Uses a dark SVG drop-shadow filter (`#inspect-halo`) directly behind the text glyphs, providing high contrast and readability over graph curves and grid lines without rigid box outlines.
 
-### Step 1: Stemming Channel & Seating
-The parser strips `.txt` and looks at the very end of the string for channel (`L` or `R`) and seating number (`1` to `9`):
-- `Audio Technica ATH R50x G L1.txt` $\rightarrow$ Channel: `L`, Seating: `1`, Base string: `Audio Technica ATH R50x G`
-- `Sony MDR-MV1 R2.txt` $\rightarrow$ Channel: `R`, Seating: `2`, Base string: `Sony MDR-MV1`
+### 9. Recent Theming, Save Button & Export Upgrades
+* **Semantic Theming & Default Dark Mode**: 
+  * Configured **Dark Mode (`theme-dark`)** as the default application theme on load.
+  * Introduced semantic CSS custom properties (`--graph-axis-text`, `--graph-grid-line`, `--inspector-bg`, `--inspector-border`, `--inspector-text`) ensuring crystal-clear readability and high contrast across Light, Dark, and Contrast modes.
+  * Updated the theme toggle button to display the **currently active theme name** (e.g. `Dark Mode`, `Light Mode`, `Contrast Mode`) instead of the next rotation target.
+* **Clean Legend Labels (No Bounding Boxes & Color Sync)**:
+  * Removed rectangular background bounding boxes (`g.lineLabel rect`) behind bottom legend labels, styling them as clean, borderless text matching the minimalist inspect tool aesthetic.
+  * Synchronized custom color picker hex values so that selecting a custom color updates graph lines, AVG buttons, and model labels consistently.
+* **Renamed Screenshot Button to "Save"**:
+  * Updated `#download` and `#download-faux` buttons from "screenshot" / "Screenshot" to **"save" / "Save"**.
+* **Theme-Aware Save / Export Passthrough**:
+  * Enhanced `saveGraph()` and `saveSvgAsPng` to dynamically forward active theme classes (`theme-dark`, `theme-contrast`, `theme-default`), active background colors, and CSS custom property variables into exported PNGs and SVGs.
+* **Dynamic Filename Alignment**:
+  * Exported filenames automatically align to the active models and comparison state currently rendered on screen via `getDynamicFilename(ext)`.
 
-### Step 2: Multi-Word Brand Extraction
-The parser splits single-word brands (like `Sony`, `Sennheiser`, `Focal`, `Hifiman`, `AUNE`) automatically on the first space.
-
-For **multi-word brands** (where a space occurs inside the brand name itself), the parser checks the `MULTIWORD_BRANDS` list at the top of `update_phonebook.py`:
-```python
-MULTIWORD_BRANDS = [
-    "Audio Technica",
-    "Dan Clark Audio",
-    "Austrian Audio",
-    "Meze Audio",
-    "ZMF Headphones"
-]
-```
-- **Example**: `Audio Technica ATH R50x`
-  - Matches `Audio Technica` as the brand name.
-  - Leaves `ATH R50x` as the model string.
-  - *Note*: If you ever add a new headphone from a multi-word brand that isn't listed (e.g., `Bang Olufsen` or `Final Audio`), simply add that string to `MULTIWORD_BRANDS` in `update_phonebook.py`.
-
-### Step 3: Variant & Suffix Extraction
-The parser groups files under the shortest common core model name and assigns variant suffixes:
-- **Priority 1: Parentheses `(...)`**:
-  - `AUNE AR3000 (Vienna Glasses) L1.txt` $\rightarrow$ Core Model: `AR3000`, Variant: `Vienna Glasses`
-  - `Sennheiser HD600 (Velour Pads) L1.txt` $\rightarrow$ Core Model: `HD600`, Variant: `Velour Pads`
-- **Priority 2: Keyword scanning without brackets**:
-  - `Audio Technica ATH R50x L1.txt` $\rightarrow$ Core Model: `ATH R50x`, Variant: `""` (Main)
-  - `Audio Technica ATH R50x G L1.txt` $\rightarrow$ Core Model: `ATH R50x`, Variant: `Glasses`
-  - `AUNE AR3000 Vienna L1.txt` $\rightarrow$ Core Model: `AR3000`, Variant: `Vienna`
-  - `AUNE AR3000 Vienna G L1.txt` $\rightarrow$ Core Model: `AR3000`, Variant: `Vienna Glasses`
+### 10. Development Sandbox & Asset Mirroring Architecture
+* **The `/public/` Folder**: In the Gemini AI Studio preview environment, the `/public/` directory acts as the static serving root for web assets and scripts.
+* **Automated Asset Mirroring (`autoSyncAssetsPlugin`)**: To prevent manual file duplication, a custom Vite plugin (`autoSyncAssetsPlugin` in `vite.config.ts`) automatically mirrors all files and subdirectories from `/assets/` directly into `/public/assets/` (along with `README.md`) upon dev server startup, build start, and page requests. Developers can edit or add assets exclusively in `/assets/` with instant synchronization.
 
 ---
 
-## 4. User Guide: How to Upload New Measurements
+## 3. User Guide & REW Export Reminder
 
-### Step 1: Exporting from REW
-1. In REW, take your measurements (typically 3 seatings on Left and 3 seatings on Right).
-2. Apply **1/6-octave acoustic smoothing** to your measurements. Apply L and R DF-HRTF compensation.
-3. Choose **File $\rightarrow$ Export $\rightarrow$ Export measurement as text** (`.txt`, tab/space separated).
+### Exporting REW Measurements
+1. Take measurements in REW (typically 3 seatings per ear: `L1..L3` and `R1..R3`).
+2. Apply **1/6-octave acoustic smoothing**.
+3. Apply Left and Right **DF-HRTF compensation**.
+4. Export as text (`.txt`, tab/space separated): **File $\rightarrow$ Export $\rightarrow$ Export measurement as text**.
 
----
+### Filename Standard
+Format: `[Brand] [Model] [Glass or Variant] [Channel][Seating].txt`
 
-### Step 2: Naming Your Files
-Name your files following this standard format:
-```
-[Brand] [Model] [Optional Variant or G] [Channel][Seating].txt
-```
+* Clean Seal: `Sony MDR-MV1 L1.txt`
+* Eyeglasses Seal: `Sony MDR-MV1 G L1.txt`
+* Multi-Word Brand: `Audio Technica ATH R50x L1.txt`
+* Pad/Variant Tag: `Sennheiser HD600 (Velour Pads) L1.txt`
 
-#### Filename Examples:
-| What You Measured | Filename to Upload | How It Appears in App |
-| :--- | :--- | :--- |
-| **Sony MDR-MV1 (Clean Seal, Left Ear, Seat 1)** | `Sony MDR-MV1 L1.txt` | Brand: `Sony`, Model: `MDR-MV1` |
-| **Sony MDR-MV1 (Eyeglasses, Left Ear, Seat 1)** | `Sony MDR-MV1 G L1.txt` | Brand: `Sony`, Model: `MDR-MV1` (Variant toggle: `Glasses`) |
-| **Audio Technica ATH R50x (Clean Seal, Left Ear, Seat 1)** | `Audio Technica ATH R50x L1.txt` | Brand: `Audio Technica`, Model: `ATH R50x` |
-| **Audio Technica ATH R50x (Eyeglasses, Left Ear, Seat 1)** | `Audio Technica ATH R50x G L1.txt` | Brand: `Audio Technica`, Model: `ATH R50x` (Variant toggle: `Glasses`) |
-| **AUNE AR3000 (Vienna Demo Unit, Clean Seal, Left Ear, Seat 1)** | `AUNE AR3000 Vienna L1.txt` | Brand: `AUNE`, Model: `AR3000` (Variant toggle: `Vienna`) |
-| **AUNE AR3000 (Vienna Demo Unit, Eyeglasses, Left Ear, Seat 1)** | `AUNE AR3000 Vienna G L1.txt` | Brand: `AUNE`, Model: `AR3000` (Variant toggle: `Vienna Glasses`) |
-| **Custom Pad Swap (Parentheses example)** | `Sennheiser HD600 (Velour Pads) L1.txt` | Brand: `Sennheiser`, Model: `HD600` (Variant toggle: `Velour Pads`) |
-
----
-
-### Step 3: Uploading Directly on GitHub
-1. Open your repository on **GitHub.com**.
-2. Navigate to the **`/data/`** directory.
-3. Click **Add file $\rightarrow$ Upload files**.
-4. Drag and drop your `.txt` files into the box and click **Commit changes**.
-5. The GitHub Action will process the files and update the live site within seconds!
-
----
-
-## 5. Summary Ingestion Checklist
-- [ ] **File Extension**: Ensure files end in `.txt`.
-- [ ] **Channel & Seating**: End filenames with `L1..L9` or `R1..R9` (e.g. `L1`, `L2`, `L3`).
-- [ ] **Glasses Seal**: Use `G` or `Glasses` (e.g., `Sony MDR-MV1 G L1.txt` or `Sony MDR-MV1 (Glasses) L1.txt`).
-- [ ] **Multi-Word Brands**: Add new multi-word brand names like `Audio Technica` or `Dan Clark Audio` to `MULTIWORD_BRANDS` in `update_phonebook.py` if needed.
-- [ ] **REW Smoothing**: Keep **1/6-octave acoustic smoothing** enabled during REW text export so the header contains `* Smoothing: 1/6 octave` to avoid warning badges.
-- [ ] **REW Calibration**: Calibrate measurements with the appropriate L and R Fc-Construct DF-HRTF files prior to export. 
+Upload `.txt` files directly into the **`/data/`** directory on GitHub to automatically build the phonebook. 

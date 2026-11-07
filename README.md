@@ -49,9 +49,27 @@ This application is customized specifically for **open-canal MIRE headphone acou
 * **SVG Layer Isolation**: Separates static curve labels (`g.labels-layer`) from interactive overlays (`g.tools-layer`), entirely eliminating label jumping when toggling Inspect or Calculate tools.
 * **Logarithmic Tilt Representation Note**: The $-1\text{ dB/Octave}$ tilt uses logarithmic scaling (`tilt * Math.log2(frequency / referenceFrequency)`). While a symmetric $\pm 5\text{ dB}$ split between 20 Hz and 20 kHz requires the reference pivot to be at the geometric mean ($f_{\text{geometric}} = \sqrt{20 \times 20,000} \approx 632.46\text{ Hz}$), the target curves anchor at the industry-standard **1 kHz (1000 Hz)** reference point, yielding $+5.64\text{ dB}$ at 20 Hz and $-4.32\text{ dB}$ at 20 kHz.
 
-### 8. Inspect Tool Graph Box Bounding & Gaussian Halo
+### 8. Inspect Tool Graph Box Bounding
 * **Graph Box Bounding Math**: Computes the exact rendered SVG bounding box (`getBBox()`) of active inspection labels and clamps the container's horizontal position (`dx`) between graph padding boundaries (`pad.l` and `pad.l + W`). As the cursor line moves all the way to 20 Hz or 20 kHz, the inspection text block locks cleanly against the left or right edge without overflowing the graph box.
-* **Diffused Dark Gaussian Halo**: Uses a dark SVG drop-shadow filter (`#inspect-halo`) directly behind the text glyphs, providing high contrast and readability over graph curves and grid lines without rigid box outlines.
+
+### 9. Theme modes, Save Button & Export Upgrades
+* **Semantic Theming & Default Dark Mode**: 
+  * Configured **Dark Mode (`theme-dark`)** as the default application theme on load.
+  * Introduced semantic CSS custom properties (`--graph-axis-text`, `--graph-grid-line`, `--inspector-bg`, `--inspector-border`, `--inspector-text`) ensuring crystal-clear readability and high contrast across Light, Dark, and Contrast modes.
+  * Updated the theme toggle button to display the **currently active theme name** (e.g. `Dark Mode`, `Light Mode`, `Contrast Mode`) instead of the next rotation target.
+* **Clean Legend Labels (No Bounding Boxes & Color Sync)**:
+  * Removed rectangular background bounding boxes (`g.lineLabel rect`) behind bottom legend labels, styling them as clean, borderless text matching the minimalist inspect tool aesthetic.
+  * Synchronized custom color picker hex values so that selecting a custom color updates graph lines, AVG buttons, and model labels consistently.
+* **Renamed Screenshot Button to "Save"**:
+  * Updated `#download` and `#download-faux` buttons from "screenshot" / "Screenshot" to **"save" / "Save"**.
+* **Theme-Aware Save / Export Passthrough**:
+  * Enhanced `saveGraph()` and `saveSvgAsPng` to dynamically forward active theme classes (`theme-dark`, `theme-contrast`, `theme-default`), active background colors, and CSS custom property variables into exported PNGs and SVGs.
+* **Dynamic Filename Alignment**:
+  * Exported filenames automatically align to the active models and comparison state currently rendered on screen via `getDynamicFilename(ext)`. 
+
+### 10. Development Sandbox & Asset Mirroring Architecture
+* **The `/public/` Folder**: In the Gemini AI Studio preview environment, the `/public/` directory acts as the static serving root for web assets and scripts.
+* **Automated Asset Mirroring (`autoSyncAssetsPlugin`)**: To prevent manual file duplication, a custom Vite plugin (`autoSyncAssetsPlugin` in `vite.config.ts`) automatically mirrors all files and subdirectories from `/assets/` directly into `/public/assets/` (along with `README.md`) upon dev server startup, build start, and page requests. Developers can edit or add assets exclusively in `/assets/` with instant synchronization.
 
 ---
 
@@ -71,4 +89,4 @@ Format: `[Brand] [Model] [Glass or Variant] [Channel][Seating].txt`
 * Multi-Word Brand: `Audio Technica ATH R50x L1.txt`
 * Pad/Variant Tag: `Sennheiser HD600 (Velour Pads) L1.txt`
 
-Upload `.txt` files directly into the **`/data/`** directory on GitHub to automatically build the phonebook.
+Upload `.txt` files directly into the **`/data/`** directory on GitHub to automatically build the phonebook. 

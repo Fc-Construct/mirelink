@@ -93,10 +93,13 @@ image.graph_logo {
   box-sizing: border-box;
   flex-wrap: wrap;
   flex-direction: row;
-  background-color: var(--background-color);
+  background-color: var(--background-color-graph);
+  color: var(--font-color-primary);
   border: 1px solid var(--background-color-contrast-more);
-  border-radius: 6px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
   z-index: 1000;
+  padding: 12px;
 }
 
 .colorStylePicker .left-side {

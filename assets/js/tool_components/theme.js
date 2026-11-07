@@ -1,38 +1,39 @@
-// Theme switcher (default / dark / contrast)
-// Persists choice in localStorage as `theme-pref`.
+// Theme switcher (Dark / Light / Contrast)
+// Persists choice in localStorage as `theme-pref`. Default is `theme-dark`.
 function themeChooser(command) {
     let docBody = document.querySelector("body"),
         themeButton = document.querySelector("button#theme");
 
     if (!themeButton) return;
-    let themeCurrent = themeButton.getAttribute("current-theme") || "theme-default";
+    let themeCurrent = themeButton.getAttribute("current-theme") || localStorage.getItem("theme-pref") || "theme-dark";
 
-    // If a change event, cycle through states
+    // Cycle through states: Dark -> Light (default) -> Contrast -> Dark
     if (command === "change") {
         if (themeCurrent === "theme-dark") {
-            localStorage.setItem("theme-pref", "theme-contrast");
-        } else if (themeCurrent === "theme-contrast") {
-            localStorage.setItem("theme-pref", "theme-default");
+            themeCurrent = "theme-default"; // Light mode
+        } else if (themeCurrent === "theme-default") {
+            themeCurrent = "theme-contrast"; // Contrast mode
         } else {
-            localStorage.setItem("theme-pref", "theme-dark");
+            themeCurrent = "theme-dark"; // Dark mode
         }
+        localStorage.setItem("theme-pref", themeCurrent);
     }
 
-    let themePref = localStorage.getItem("theme-pref") || "theme-default";
+    let themePref = localStorage.getItem("theme-pref") || "theme-dark";
 
-    // Apply state
+    // Apply theme class and update label to show the CURRENT active theme
     if (themePref === "theme-dark") {
         docBody.classList.remove("theme-default", "theme-contrast");
         docBody.classList.add("theme-dark");
-        themeButton.textContent = "contrast mode";
+        themeButton.textContent = "Dark Mode";
     } else if (themePref === "theme-contrast") {
         docBody.classList.remove("theme-default", "theme-dark");
         docBody.classList.add("theme-contrast");
-        themeButton.textContent = "default mode";
+        themeButton.textContent = "Contrast Mode";
     } else {
         docBody.classList.remove("theme-dark", "theme-contrast");
         docBody.classList.add("theme-default");
-        themeButton.textContent = "dark mode";
+        themeButton.textContent = "Light Mode";
     }
 
     themeButton.setAttribute("current-theme", themePref);
@@ -43,14 +44,24 @@ if (typeof themingEnabled !== "undefined" && themingEnabled) {
         miscTools = document.querySelector("div.miscTools");
 
     themeButton.setAttribute("id", "theme");
-    themeButton.textContent = "dark mode";
-    themeButton.setAttribute("current-theme", "theme-default");
+    let initPref = localStorage.getItem("theme-pref") || "theme-dark";
+    themeButton.setAttribute("current-theme", initPref);
+
+    if (initPref === "theme-dark") {
+        themeButton.textContent = "Dark Mode";
+    } else if (initPref === "theme-contrast") {
+        themeButton.textContent = "Contrast Mode";
+    } else {
+        themeButton.textContent = "Light Mode";
+    }
+
     themeButton.addEventListener("click", function () {
         themeChooser("change");
     });
 
-    if (miscTools) {
+    if (miscTools && !document.querySelector("button#theme")) {
         miscTools.append(themeButton);
     }
     themeChooser();
 }
+
