@@ -97,6 +97,17 @@
           "",
           "Glasses"
         ]
+      },
+      {
+        "name": "D1",
+        "file": [
+          "HEDD D1",
+          "HEDD D1 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
       }
     ]
   },
@@ -184,6 +195,10 @@
     "name": "Philphone",
     "phones": [
       {
+        "name": "G",
+        "file": "Philphone G"
+      },
+      {
         "name": "Open",
         "file": [
           "Philphone Open",
@@ -193,6 +208,10 @@
           "",
           "Glasses"
         ]
+      },
+      {
+        "name": "Philphone",
+        "file": "Philphone"
       }
     ]
   },
