@@ -3,15 +3,16 @@
 update_phonebook.py
 Automation script for Fc-Construct's MIRE Squiglink.
 
-Treats /data/ as the single source of truth:
-1. Scans /data/ directory for headphone measurement files.
-2. Parses brands, models, variants, channels, and seatings.
-   - Eliminates "Default" terminology so main measurements have no variant suffix.
-   - Priority 1: Explicit parentheses `(...)` for variants.
-   - Priority 2: Keyword scanning for seal (`G`, `Glasses`) and location/unit tags (`Vienna`, `CanJam`, `Tour`, `Unit B`, `Sample 2`, etc.).
-3. Generates data/phone_book.json.
-4. Automatically mirrors all measurement files and phone_book.json into /public/data/
-   so the AI Studio / Vite preview environment is always 100% in sync with /data/.
+Treats data/phone_book.json as the curated source of truth:
+1. Reads existing data/phone_book.json first, preserving all manual curation, ordering, and names.
+   - Raises a RuntimeError if the file exists but is malformed or invalid to prevent overwriting.
+2. Scans /data/ directory for headphone measurement files (supporting compact L1/R1 and spaced L 1/R 1).
+3. Compares parsed measurement file prefixes with existing phonebook file mappings.
+4. Leaves all existing entries completely intact (never removes or overwrites existing models).
+5. For newly discovered measurement prefixes:
+   - Matches to an existing model if it represents a new variant (e.g. glasses or pad variant).
+   - Otherwise, adds a new model or brand cleanly.
+6. Writes the merged result to data/phone_book.json and mirrors to public/data/phone_book.json.
 """
 
 import os
@@ -26,42 +27,29 @@ PUBLIC_DATA_DIR = os.path.join(BASE_DIR, "public", "data")
 OUTPUT_FILE = os.path.join(DATA_DIR, "phone_book.json")
 PUBLIC_OUTPUT_FILE = os.path.join(PUBLIC_DATA_DIR, "phone_book.json")
 
-# Known headphone brands for clean categorization
-COMMON_BRANDS = [
-    "Sennheiser", "Hifiman", "Audeze", "Beyerdynamic", "Focal",
-    "AKG", "Audio-Technica", "Meze", "Sony", "Dan Clark Audio",
-    "Moondrop", "Koss", "Stax", "ZMF", "Abyss", "Grado",
-    "Shure", "Bose", "Apple", "Austrian Audio", "Denon", "Fostex",
-    "AUNE", "Aune"
-]
-
-# Known non-model variant keywords (locations, event demos, condition tags)
-KNOWN_VARIANT_KEYWORDS = [
-    "Vienna", "CanJam", "Tour", "Demo", "Event",
-    "Unit 1", "Unit 2", "Unit A", "Unit B",
-    "Sample 1", "Sample 2", "S1", "S2"
+# Known multi-word headphone brands for clean categorization of new discoveries
+MULTIWORD_BRANDS = [
+    "Audio Technica",
+    "Dan Clark Audio",
+    "Austrian Audio",
+    "Meze Audio",
+    "ZMF Headphones",
+    "ArcTec Berlin",
+    "HEDD Audio"
 ]
 
 def parse_filename(filename):
     """
-    Parses a measurement filename.
-    Returns dict with file metadata or None.
-
-    Examples handled:
-      - Sennheiser HD600 L1.txt                        -> Model: HD600, Variant: None
-      - Sennheiser HD600 (Glasses) L1.txt              -> Model: HD600, Variant: Glasses
-      - Sony MDR-MV1 G L1.txt                          -> Model: MDR-MV1, Variant: Glasses
-      - AUNE AR3000 Vienna L1.txt                      -> Model: AR3000, Variant: Vienna
-      - AUNE AR3000 Vienna G L.txt                     -> Model: AR3000, Variant: Vienna Glasses
-      - AUNE AR3000 (Vienna Glasses) L1.txt            -> Model: AR3000, Variant: Vienna Glasses
+    Stems channel and seating number from the end of the filename.
+    Supports both compact (e.g. ' L1', ' R2') and spaced (e.g. ' L 1', ' R 2', ' L', ' R').
     """
     if not filename.endswith(".txt"):
         return None
 
     stem = filename[:-4].strip()
 
-    # Match channel and optional seating number at the end: e.g. " L1", " R3", " L"
-    match = re.search(r"^(.*?)\s+([LR])(\d*)$", stem, re.IGNORECASE)
+    # Match channel and optional seating number at the end
+    match = re.search(r"^(.*?)\s+([LR])\s*(\d*)$", stem, re.IGNORECASE)
     if not match:
         return None
 
@@ -69,71 +57,42 @@ def parse_filename(filename):
     channel = match.group(2).upper()
     seating = match.group(3)
 
-    model_root = full_name
-    variant_suffix = None
-
-    # PRIORITY 1: Explicit parentheses check e.g. "AUNE AR3000 (Vienna Glasses)"
-    paren_match = re.search(r"^(.*?)\s*\(([^)]+)\)$", full_name)
-    if paren_match:
-        model_root = paren_match.group(1).strip()
-        v_str = paren_match.group(2).strip()
-        # Clean up "G" in brackets to "Glasses"
-        v_str = re.sub(r"\bG\b", "Glasses", v_str, flags=re.IGNORECASE)
-        variant_suffix = v_str
-    else:
-        # PRIORITY 2: Keyword scanning without brackets e.g. "AUNE AR3000 Vienna G"
-        tokens = full_name.split()
-        var_parts = []
-        model_parts = []
-
-        for token in tokens:
-            t_lower = token.lower()
-            if t_lower in ["g", "glasses"]:
-                var_parts.append("Glasses")
-            elif any(t_lower == kw.lower() for kw in KNOWN_VARIANT_KEYWORDS):
-                var_parts.append(token)
-            else:
-                model_parts.append(token)
-
-        if var_parts:
-            model_root = " ".join(model_parts)
-            variant_suffix = " ".join(var_parts)
-
     return {
         "full_file_prefix": full_name,
-        "model_root": model_root,
-        "variant": variant_suffix,
         "channel": channel,
         "seating": int(seating) if seating else 1
     }
 
-def extract_brand_and_model(model_root):
+def extract_brand_and_model(full_file_prefix, known_brands=None):
     """
-    Extracts brand and model from model_root string.
-    Checks against COMMON_BRANDS, otherwise splits on first word.
+    Extracts brand and model string.
+    1. Checks if file starts with any brand already present in phone_book.json.
+    2. Checks known multi-word brands list.
+    3. Fallback: Splits on the first space.
     """
-    for brand in COMMON_BRANDS:
-        if model_root.lower().startswith(brand.lower()):
-            model = model_root[len(brand):].strip()
-            return brand, model if model else brand
+    candidate_brands = list(MULTIWORD_BRANDS)
+    if known_brands:
+        for b in known_brands:
+            if b not in candidate_brands:
+                candidate_brands.append(b)
 
-    # Fallback: split on first space
-    parts = model_root.split(" ", 1)
+    sorted_brands = sorted(candidate_brands, key=len, reverse=True)
+    for brand in sorted_brands:
+        if full_file_prefix.lower().startswith(brand.lower() + " ") or full_file_prefix.lower() == brand.lower():
+            rest = full_file_prefix[len(brand):].strip()
+            return brand, rest if rest else brand
+
+    parts = full_file_prefix.split(" ", 1)
     if len(parts) == 2:
         return parts[0], parts[1]
-    return model_root, model_root
+    return full_file_prefix, full_file_prefix
 
 def sync_data_to_public():
-    """
-    Synchronizes /data/ to /public/data/ so Vite in AI Studio serves
-    identical files without manual copying.
-    """
     if not os.path.exists(DATA_DIR):
         return
 
     os.makedirs(PUBLIC_DATA_DIR, exist_ok=True)
 
-    # Copy / update files from DATA_DIR to PUBLIC_DATA_DIR
     for root, dirs, files in os.walk(DATA_DIR):
         rel_path = os.path.relpath(root, DATA_DIR)
         dest_dir = os.path.join(PUBLIC_DATA_DIR, rel_path) if rel_path != "." else PUBLIC_DATA_DIR
@@ -144,7 +103,6 @@ def sync_data_to_public():
             if not os.path.exists(dest_file) or os.path.getmtime(src_file) > os.path.getmtime(dest_file):
                 shutil.copy2(src_file, dest_file)
 
-    # Remove files in PUBLIC_DATA_DIR that were deleted from DATA_DIR
     for root, dirs, files in os.walk(PUBLIC_DATA_DIR):
         rel_path = os.path.relpath(root, PUBLIC_DATA_DIR)
         src_dir = os.path.join(DATA_DIR, rel_path) if rel_path != "." else DATA_DIR
@@ -156,92 +114,189 @@ def sync_data_to_public():
                 except OSError:
                     pass
 
-def generate_phonebook():
+def load_existing_phonebook():
+    """
+    Loads existing data/phone_book.json if available.
+    Fails hard (raises RuntimeError) if the file exists but is malformed or invalid
+    to prevent overwriting the curated source of truth with an empty list.
+    """
+    if os.path.exists(OUTPUT_FILE):
+        try:
+            with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+                raise RuntimeError(f"Error: {OUTPUT_FILE} root structure must be a JSON list.")
+        except Exception as e:
+            if isinstance(e, RuntimeError):
+                raise e
+            raise RuntimeError(f"Error: Failed to parse existing {OUTPUT_FILE} as valid JSON: {e}")
+    return []
+
+def get_known_prefixes(phonebook):
+    """
+    Returns a set of all file prefixes already listed in the phonebook.
+    """
+    known = set()
+    for brand_entry in phonebook:
+        for phone in brand_entry.get("phones", []):
+            f = phone.get("file")
+            if isinstance(f, list):
+                known.update(f)
+            elif isinstance(f, str):
+                known.add(f)
+    return known
+
+def find_matching_model_for_variant(new_prefix, phonebook):
+    """
+    Determines if a new prefix belongs to an existing model as a variant.
+    Returns (brand_entry, phone_entry, variant_suffix) if matched, else None.
+    Avoids greedy prefix collisions (e.g. Susvara vs Susvara Unveiled).
+    Only matches explicit glasses tokens (e.g. '<ex> G' / '<ex> Glasses') or explicit parentheses.
+    """
+    for brand_entry in phonebook:
+        for phone in brand_entry.get("phones", []):
+            files = phone.get("file")
+            existing_prefixes = files if isinstance(files, list) else [files]
+            
+            # Check if new_prefix is a glasses variant of an existing file prefix
+            for ex in existing_prefixes:
+                # Matches e.g. "<ex> G" or "<ex> Glasses"
+                g_match = re.search(r"^(.*?)\s+\b(G|Glasses)\b$", new_prefix, re.IGNORECASE)
+                if g_match and g_match.group(1).strip() == ex:
+                    # Find corresponding base suffix if available
+                    suffixes = phone.get("suffix")
+                    ex_suffix = ""
+                    if isinstance(suffixes, list) and len(suffixes) == len(existing_prefixes):
+                        ex_suffix = suffixes[existing_prefixes.index(ex)]
+                    new_suffix = f"{ex_suffix} Glasses".strip() if ex_suffix else "Glasses"
+                    return brand_entry, phone, new_suffix
+
+                # Matches e.g. "<ex> (<variant_name>)"
+                paren_match = re.search(r"^(.*?)\s*\(([^)]+)\)$", new_prefix)
+                if paren_match and paren_match.group(1).strip() == ex:
+                    var_label = paren_match.group(2).strip()
+                    cleaned_var = re.sub(r"\bG\b", "Glasses", var_label, flags=re.IGNORECASE)
+                    return brand_entry, phone, cleaned_var
+
+    return None
+
+def update_phonebook():
     if not os.path.exists(DATA_DIR):
         print(f"Error: Directory '{DATA_DIR}' does not exist.")
         return
 
-    # Scan for measurement files (excluding targets and subdirectories)
-    entries = []
+    # 1. Load existing curated phonebook (raises RuntimeError if invalid JSON)
+    phonebook = load_existing_phonebook()
+
+    # 2. Extract existing file prefixes to ensure zero duplicates
+    known_prefixes = get_known_prefixes(phonebook)
+
+    # 3. Scan for measurement files in /data/
+    discovered_prefixes = set()
     for fname in os.listdir(DATA_DIR):
         fpath = os.path.join(DATA_DIR, fname)
         if os.path.isfile(fpath):
             parsed = parse_filename(fname)
             if parsed:
-                entries.append(parsed)
+                discovered_prefixes.add(parsed["full_file_prefix"])
 
-    if not entries:
-        print(f"No valid measurement files found in '{DATA_DIR}'.")
+    # 4. Filter for new prefixes not yet represented in phone_book.json
+    new_prefixes = sorted(discovered_prefixes - known_prefixes)
+
+    if not new_prefixes:
+        print("Phonebook is up to date. No new measurements to add.")
+        sync_data_to_public()
+        # Save to ensure mirrored public copy matches
+        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(phonebook, f, indent=2)
+        with open(PUBLIC_OUTPUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(phonebook, f, indent=2)
         return
 
-    # Group by Brand -> Model Root -> Variants
-    brand_groups = defaultdict(lambda: defaultdict(dict))
-    seating_stats = defaultdict(lambda: defaultdict(int))
+    print(f"Discovered {len(new_prefixes)} new measurement prefix(es) to merge:")
+    for np in new_prefixes:
+        print(f"  + {np}")
 
-    for item in entries:
-        brand, model = extract_brand_and_model(item["model_root"])
-        var = item["variant"] or ""  # Main measurement has empty variant label (no "Default")
-        full_prefix = item["full_file_prefix"]
-        brand_groups[brand][model][var] = full_prefix
-        seating_stats[full_prefix][item["channel"]] = max(
-            seating_stats[full_prefix][item["channel"]],
-            item["seating"]
-        )
+    known_brand_names = [b["name"] for b in phonebook]
 
-    # Build JSON structure
-    phonebook = []
-    for brand in sorted(brand_groups.keys()):
-        phones_list = []
-        for model in sorted(brand_groups[brand].keys()):
-            variants = brand_groups[brand][model]
-            
-            # If multiple variants exist
-            if len(variants) > 1:
-                # Put main measurement (empty var "") first
-                sorted_var_keys = sorted(variants.keys(), key=lambda v: (0 if v == "" else 1, v))
-                file_list = [variants[v] for v in sorted_var_keys]
-                suffix_list = [v for v in sorted_var_keys]
-                
-                phones_list.append({
-                    "name": model,
-                    "file": file_list,
-                    "suffix": suffix_list
-                })
-            else:
-                var_name = list(variants.keys())[0]
-                file_prefix = variants[var_name]
-                phones_list.append({
-                    "name": model if var_name == "" else f"{model} ({var_name})",
-                    "file": file_prefix
-                })
+    # 5. Process each new prefix without altering any existing entries
+    unmatched_new_models = []
+    for prefix in new_prefixes:
+        match = find_matching_model_for_variant(prefix, phonebook)
+        if match:
+            brand_entry, phone_entry, variant_suffix = match
+            # Upgrade phone_entry to multi-file/suffix if it was a single string
+            current_files = phone_entry.get("file")
+            current_suffixes = phone_entry.get("suffix")
 
-        phonebook.append({
-            "name": brand,
-            "phones": phones_list
-        })
+            if isinstance(current_files, str):
+                current_files = [current_files]
+                current_suffixes = [""]
 
-    # Save to data/phone_book.json
+            if not isinstance(current_suffixes, list) or len(current_suffixes) != len(current_files):
+                current_suffixes = ["" for _ in current_files]
+
+            current_files.append(prefix)
+            current_suffixes.append(variant_suffix)
+
+            phone_entry["file"] = current_files
+            phone_entry["suffix"] = current_suffixes
+            print(f"  -> Added variant '{variant_suffix}' to existing model '{phone_entry.get('name')}' under brand '{brand_entry.get('name')}'")
+        else:
+            unmatched_new_models.append(prefix)
+
+    # 6. For newly discovered models that don't match existing models as variants
+    if unmatched_new_models:
+        brand_grouped = defaultdict(list)
+        for p in unmatched_new_models:
+            brand, rest = extract_brand_and_model(p, known_brand_names)
+            brand_grouped[brand].append((p, rest))
+
+        for brand, items in brand_grouped.items():
+            # Find or create brand entry in phonebook
+            brand_entry = next((b for b in phonebook if b["name"].lower() == brand.lower()), None)
+            if not brand_entry:
+                brand_entry = {"name": brand, "phones": []}
+                phonebook.append(brand_entry)
+
+            # Check if items represent base + glasses variants
+            model_subgroups = defaultdict(list)
+            for full_p, rest in items:
+                clean_name = re.sub(r"\s+\b(G|Glasses)\b$", "", rest, flags=re.IGNORECASE).strip()
+                if not clean_name:
+                    clean_name = rest
+                model_subgroups[clean_name].append(full_p)
+
+            for model_name, prefixes in model_subgroups.items():
+                if len(prefixes) > 1:
+                    sorted_p = sorted(prefixes, key=lambda x: (1 if re.search(r"\b(G|Glasses)\b$", x, re.I) else 0, x))
+                    suffixes = ["Glasses" if re.search(r"\b(G|Glasses)\b$", x, re.I) else "" for x in sorted_p]
+                    brand_entry["phones"].append({
+                        "name": model_name,
+                        "file": sorted_p,
+                        "suffix": suffixes
+                    })
+                else:
+                    is_glasses = bool(re.search(r"\b(G|Glasses)\b$", prefixes[0], re.I))
+                    brand_entry["phones"].append({
+                        "name": model_name,
+                        "file": prefixes[0] if not is_glasses else prefixes,
+                        **({"suffix": ["Glasses"]} if is_glasses else {})
+                    })
+                print(f"  -> Added new model '{model_name}' under brand '{brand_entry['name']}'")
+
+    # 7. Write curated, merged result to data/phone_book.json
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(phonebook, f, indent=2)
 
-    # Sync everything to /public/data/ for AI Studio preview
+    # 8. Mirror to /public/data/ and write public/data/phone_book.json
     sync_data_to_public()
 
-    # Also save to public/data/phone_book.json
     with open(PUBLIC_OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(phonebook, f, indent=2)
 
-    print(f"Successfully generated {OUTPUT_FILE} and synced to {PUBLIC_DATA_DIR}")
-    print(f"Indexed {len(phonebook)} brand(s):")
-    for b in phonebook:
-        print(f"  • {b['name']}: {len(b['phones'])} model(s)")
-        for p in b["phones"]:
-            name = p["name"] if isinstance(p["name"], str) else p["name"][0]
-            if "suffix" in p:
-                display_suffixes = [s if s != "" else "Main" for s in p['suffix']]
-                print(f"     - {name} [Variants: {', '.join(display_suffixes)}]")
-            else:
-                print(f"     - {name}")
+    print(f"Successfully merged updates into {OUTPUT_FILE} and mirrored to {PUBLIC_OUTPUT_FILE}")
 
 if __name__ == "__main__":
-    generate_phonebook()
+    update_phonebook()

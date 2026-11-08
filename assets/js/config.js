@@ -1,7 +1,7 @@
 // Configuration options for Fc-Construct's MIRE Squiglink
 const init_phones = ["10 dB downwards tilt Target", "Sennheiser HE1"], // Graphs to display on initial load
-      DIR = "data/",                                // Directory where graph files are stored
-      PHONE_BOOK = "data/phone_book.json",          // Path to phone book JSON file
+      DIR = "/data/",                               // Directory where graph files are stored
+      PHONE_BOOK = "/data/phone_book.json",         // Path to phone book JSON file
       default_channels = ["L","R"],                 // Default channels to display
       default_normalization = "Hz",                 // Sets default graph normalization mode ("dB" or "Hz")
       default_norm_db = 60,                         // Sets default dB normalization point

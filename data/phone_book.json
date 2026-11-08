@@ -31,10 +31,10 @@
     ]
   },
   {
-    "name": "ArcTec",
+    "name": "ArcTec Berlin",
     "phones": [
       {
-        "name": "Berlin AB92",
+        "name": "AB92",
         "file": [
           "ArcTec Berlin AB92",
           "ArcTec Berlin AB92 G"
@@ -85,10 +85,10 @@
     ]
   },
   {
-    "name": "HEDD",
+    "name": "HEDD Audio",
     "phones": [
       {
-        "name": "Audio D1",
+        "name": "D1",
         "file": [
           "HEDD Audio D1",
           "HEDD Audio D1 G"
@@ -115,25 +115,18 @@
         ]
       },
       {
-        "name": "HE6 Remastered Stock",
+        "name": "HE6 Remastered",
         "file": [
           "HiFiMan HE6 Remastered Stock",
-          "HiFiMan HE6 Remastered Stock G"
-        ],
-        "suffix": [
-          "",
-          "Glasses"
-        ]
-      },
-      {
-        "name": "HE6 Remastered Velour",
-        "file": [
+          "HiFiMan HE6 Remastered Stock G",
           "HiFiMan HE6 Remastered Velour",
           "HiFiMan HE6 Remastered Velour G"
         ],
         "suffix": [
-          "",
-          "Glasses"
+          "Stock",
+          "Stock Glasses",
+          "Velour",
+          "Velour Glasses"
         ]
       },
       {
@@ -152,6 +145,17 @@
         "file": [
           "HiFiMan Susvara",
           "HiFiMan Susvara G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "Susvara Unveiled",
+        "file": [
+          "HiFiMan Susvara Unveiled",
+          "HiFiMan Susvara Unveiled G"
         ],
         "suffix": [
           "",
