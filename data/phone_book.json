@@ -195,10 +195,6 @@
     "name": "Philphone",
     "phones": [
       {
-        "name": "G",
-        "file": "Philphone G"
-      },
-      {
         "name": "Open",
         "file": [
           "Philphone Open",
@@ -208,10 +204,6 @@
           "",
           "Glasses"
         ]
-      },
-      {
-        "name": "Philphone",
-        "file": "Philphone"
       }
     ]
   },
