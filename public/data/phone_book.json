@@ -31,6 +31,22 @@
     ]
   },
   {
+    "name": "ArcTec",
+    "phones": [
+      {
+        "name": "Berlin AB92",
+        "file": [
+          "ArcTec Berlin AB92",
+          "ArcTec Berlin AB92 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      }
+    ]
+  },
+  {
     "name": "Audio Technica",
     "phones": [
       {
@@ -72,10 +88,10 @@
     "name": "HEDD",
     "phones": [
       {
-        "name": "D1",
+        "name": "Audio D1",
         "file": [
-          "HEDD D1",
-          "HEDD D1 G"
+          "HEDD Audio D1",
+          "HEDD Audio D1 G"
         ],
         "suffix": [
           "",
@@ -87,6 +103,17 @@
   {
     "name": "HiFiMan",
     "phones": [
+      {
+        "name": "Edition XV",
+        "file": [
+          "HiFiMan Edition XV",
+          "HiFiMan Edition XV G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
       {
         "name": "HE6 Remastered Stock",
         "file": [
@@ -108,6 +135,48 @@
           "",
           "Glasses"
         ]
+      },
+      {
+        "name": "Shangri-La Sr",
+        "file": [
+          "HiFiMan Shangri-La Sr",
+          "HiFiMan Shangri-La Sr G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "Susvara",
+        "file": [
+          "HiFiMan Susvara",
+          "HiFiMan Susvara G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Miprh",
+    "phones": [
+      {
+        "name": "Vitrum",
+        "file": [
+          "Miprh Vitrum",
+          "Miprh Vitrum G",
+          "Miprh Vitrum ZMF",
+          "Miprh Vitrum ZMF G"
+        ],
+        "suffix": [
+          "",
+          "Glasses",
+          "ZMF",
+          "ZMF Glasses"
+        ]
       }
     ]
   },
@@ -115,12 +184,15 @@
     "name": "Philphone",
     "phones": [
       {
-        "name": "G",
-        "file": "Philphone G"
-      },
-      {
-        "name": "Philphone",
-        "file": "Philphone"
+        "name": "Open",
+        "file": [
+          "Philphone Open",
+          "Philphone Open G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
       }
     ]
   },
@@ -143,6 +215,17 @@
   {
     "name": "Sony",
     "phones": [
+      {
+        "name": "MDR-CD1700",
+        "file": [
+          "Sony MDR-CD1700",
+          "Sony MDR-CD1700 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
       {
         "name": "MDR-MV1",
         "file": [
