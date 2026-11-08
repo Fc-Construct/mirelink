@@ -858,3 +858,117 @@ tbody.curves > tr > td.button-saveSquig:after {
   border: none;
   cursor: pointer;
 }
+
+
+div.scroll > div.phone-item {
+    flex-wrap: wrap;
+}
+
+div.scroll > div.phone-item:hover {
+    text-decoration: none;
+}
+
+div.scroll > div.phone-item:hover > span {
+    text-decoration: underline;
+}
+
+div.scroll > div.phone-item svg.tree-chevron {
+    position: absolute;
+    right: 36px;
+    top: 7px;
+
+    width: 24px;
+    height: 25px;
+    margin: 0;
+    cursor: pointer;
+
+    pointer-events: bounding-box;
+
+    z-index: 2;
+
+    transition: transform 0.15s ease;
+    transform-origin: center;
+}
+
+div.scroll > div.phone-item svg.tree-chevron.tree-open {
+    transform: rotate(180deg);
+}
+
+div.scroll > div.phone-item div.variant-tree {
+    flex: 1 0 100%;
+
+    display: none;
+    box-sizing: border-box;
+
+    
+    padding: 0 12px 2px 15px;
+    border-left: 3px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item {
+    display: flex;
+    align-items: center;
+
+    min-height: 30px;
+    margin-top: 2px;
+
+    font-size: 11px;
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-name {
+    display: inline-block;
+
+    padding: 5px 0 5px 10px;
+
+    color: var(--font-color-inputs);
+    cursor: pointer;
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item:hover span.variant-name {
+    color: var(--font-color-primary);
+    text-decoration: underline;
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item.variant-active span.variant-name {
+    color: var(--font-color-primary);
+    font-weight: 700;
+    cursor: default;
+    text-decoration: none;
+}
+
+div.scroll div[style*="border"] div.variant-tree div.variant-item.variant-active span.variant-name {
+    color: var(--font-color-secondary);
+}
+
+div.scroll div[style*="border"] div.variant-tree div.variant-item:hover span.variant-name {
+    color: var(--font-color-secondary);
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-add {
+    display: inline-block;
+
+    padding: 2px 9px;
+    margin-left: auto;
+
+    font-size: 16px;
+    line-height: 1.2;
+
+    color: var(--font-color-inputs);
+    cursor: pointer;
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-add:hover {
+    color: var(--font-color-primary);
+}
+
+div.scroll div[style*="border"] div.variant-tree div.variant-item span.variant-add {
+    color: var(--font-color-secondary);
+}
+
+div.scroll div[style*="border"] div.variant-tree div.variant-item span.variant-add:hover {
+    color: var(--font-color-secondary);
+}
+
+div.scroll div[style*="border"] div.variant-tree div.variant-item:hover span.variant-add {
+    color: var(--font-color-secondary);
+}

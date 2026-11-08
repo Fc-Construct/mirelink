@@ -1872,15 +1872,15 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         if (!p.isTarget) {
             let ap = activePhones.filter(p => !p.isTarget && !p.isPrefBounds);
             avg = ap.length >= 1;
-            if (ap.length===1 && ap[0].activeCurves.length!==1) {
-                setCurves(ap[0], true);
+            if (avg && ap.length===1 && ap[0].activeCurves.length!==1) {
+                setCurves(ap[0], false, 1);
             }
             activePhones.push(p);
         } else {
             activePhones.unshift(p);
         }
         p.active = true;
-        setCurves(p, avg);
+        setCurves(p, false, avg ? 1 : undefined);
     }
     if (p.isTarget && tiltableTargets.includes(p.dispName)) { // Tilt the target
         if (p.dispName === "Fc-Construct DF-HRTF") {
@@ -1916,11 +1916,10 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         .filter(p=>p && p.id!==undefined)
         .call(setPhoneTr);
     //Displays variant pop-up when phone displayed
-    if (!suppressVariant && p.fileNames && !p.copyOf && window.innerWidth > 1000) {
-        table.selectAll("tr").filter(q=>q===p).select(".variants").node().focus();
-    } else {
-        document.activeElement.blur();
+    if (!suppressVariant && !trigger && p.fileNames && !p.isTarget) {
+        setVariantTreeOpen(p.copyOf || p, true);
     }
+    document.activeElement.blur();
     if (extraEnabled && extraEQEnabled) {
         updateEQPhoneSelect();
     }
@@ -1952,12 +1951,89 @@ function removePhone(p) {
     updatePaths();
     if (baseline.p && !baseline.p.active && baseline.p != df) { setBaseline(baseline0); }
     updatePhoneTable();
-    d3.selectAll("#phones div,.target")
+    if (!p.isTarget && p.fileNames) {
+        let treeBase = p.copyOf || p;
+        let stillShown = activePhones.indexOf(treeBase) !== -1
+            || (treeBase.objs || []).some(q => q.active);
+        if (!stillShown) { setVariantTreeOpen(treeBase, false); }
+        else if (treeBase.treeOpen) { renderVariantTree(treeBase); }
+    }
+    d3.selectAll("#phones .phone-item,.target")
         .filter(q=>q===(p.copyOf||p))
         .call(setPhoneTr);
     if (extraEnabled && extraEQEnabled) {
         updateEQPhoneSelect();
     }
+}
+
+function variantsFor(p) {
+    let base = p.copyOf || p;
+    let shown = (activePhones.indexOf(base) !== -1 ? [base] : [])
+        .concat(base.objs || [])
+        .filter(q => q.active);
+    return (p.fileNames || []).map((fileName, i) => {
+        let dispName = (p.dispNames || [])[i] || fileName;
+        return { fileName: fileName, dispName: dispName,
+                 activeObj: shown.find(q => q.fileName === fileName) || null };
+    });
+}
+
+function renderVariantTree(p) {
+    if (!p.fileNames) return;
+    let item = doc.select("#phones").selectAll("div.phone-item").filter(q => q === p),
+        tree = item.select(".variant-tree");
+    if (item.empty()) return;
+    if (!p.treeOpen) { tree.selectAll("div.variant-item").remove(); return; }
+    let rows = tree.selectAll("div.variant-item").data(variantsFor(p), d => d.fileName);
+    rows.exit().remove();
+    let enter = rows.enter().append("div")
+        .attr("class", "variant-item")
+        .attr("data-filename", d => d.fileName)
+        .on("click", function (d) { variantClickName(p, d); });
+    rows = enter.merge(rows);
+    rows.classed("variant-active", d => !!d.activeObj);
+    rows.selectAll("span.variant-name").data(d => [d]).join("span")
+        .attr("class", "variant-name").text(d => d.dispName);
+    rows.selectAll("span.variant-add").data(d => [d]).join("span")
+        .attr("class", "variant-add").text(d => d.activeObj ? "\u00D7" : "+")
+        .on("click", function (d) {
+            d3.event.stopPropagation();
+            d.activeObj ? removePhone(d.activeObj) : variantClickAdd(p, d);
+        });
+}
+
+function setVariantTreeOpen(p, open) {
+    if (!p || !p.fileNames) return;
+    p.treeOpen = open;
+    let item = doc.select("#phones").selectAll("div.phone-item").filter(q => q === p);
+    if (item.empty()) return;
+    item.select(".variant-tree").style("display", open ? "block" : null);
+    item.select(".tree-chevron").classed("tree-open", open);
+    renderVariantTree(p);
+}
+
+function variantClickName(base, d) {
+    d3.event.stopPropagation();
+    if (d.activeObj) return;
+    let shown = (activePhones.indexOf(base) !== -1 ? [base] : [])
+        .concat(base.objs || []).filter(q => q.active);
+    if (shown.length) {
+        let target = shown[0];
+        if (!target.vars) target.vars = base.vars || {};
+        target.vars[target.fileName] = target.rawChannels;
+        Object.assign(target, { fileName: d.fileName, dispName: d.dispName });
+        changeVariant(target, updateVariant, undefined);
+        renderVariantTree(base);
+    } else {
+        showVariant(base, d, undefined);
+        renderVariantTree(base);
+    }
+}
+
+function variantClickAdd(base, d) {
+    d3.event.stopPropagation();
+    showVariant(base, d, undefined);
+    renderVariantTree(base);
 }
 
 function asPhoneObj(b, p, isInit, inits) {
@@ -2114,6 +2190,21 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
                     .on("mouseout" , bg(false,p => p.id!==undefined?getDivColor(p.id,p.active,p.hexColor):null))
                     .call(setClicks(showPhone));
                 phoneDiv.append("span").text(p=>p.fullName);
+                let variantPhones = phoneDiv.filter(p => p.fileNames);
+                variantPhones.append("svg")
+                    .attr("class","tree-chevron")
+                    .attr("viewBox","-7 -9 24 25")
+                    .append("path").attr("fill","currentColor")
+                    .attr("d","M1 2L5 6L9 2L8 1L6 3Q5 4 4 3L2 1Z");
+                variantPhones.select(".tree-chevron")
+                    .on("mousedown", function () {
+                        d3.event.stopPropagation();
+                        d3.event.preventDefault();
+                    })
+                    .on("click", function (p) {
+                        d3.event.stopPropagation();
+                        setVariantTreeOpen(p, !p.treeOpen);
+                    });
                 // Adding the + selection button
                 phoneDiv.append("div")
                     .attr("class", "phone-item-add")
@@ -2121,7 +2212,11 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
                         d3.event.stopPropagation();
                         showPhone(p, 0);
                     });
+                variantPhones.append("div").attr("class","variant-tree");
            });
+        doc.select("#phones").selectAll("div.phone-item").each(function (p) {
+            if (p.fileNames && p.treeOpen) renderVariantTree(p);
+        });
     };
     updatePhoneSelect();
 
