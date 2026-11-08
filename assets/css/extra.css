@@ -900,75 +900,108 @@ div.scroll > div.phone-item div.variant-tree {
     display: none;
     box-sizing: border-box;
 
-    
-    padding: 0 12px 2px 15px;
-    border-left: 3px solid color-mix(in srgb, currentColor 18%, transparent);
+    padding: 6px 10px 8px 10px;
+    margin-top: 6px;
+    border-left: 3px solid rgba(128, 128, 128, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+}
+
+/* Unselected expanded model tree in Dark Mode */
+body.theme-dark div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree {
+    border-left: 3px solid rgba(255, 255, 255, 0.25);
+    background: #1c1c1e;
+}
+
+body.theme-dark div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-name {
+    color: #dddddd;
+}
+
+body.theme-dark div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-add {
+    color: #bbbbbb;
+}
+
+/* Unselected expanded model tree in Light Mode */
+body.theme-default div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree {
+    border-left: 3px solid #888888;
+    background: #e8e8e8;
+}
+
+body.theme-default div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-name {
+    color: #222222;
+}
+
+body.theme-default div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-add {
+    color: #555555;
+}
+
+body.theme-default div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item.variant-active span.variant-name {
+    color: #000000 !important;
+}
+
+/* Highlighted (selected/graphed) model tree in ALL modes */
+div.scroll > div.phone-item.phone-highlighted div.variant-tree {
+    border-left: 3px solid rgba(0, 0, 0, 0.3) !important;
+    background: rgba(0, 0, 0, 0.08) !important;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-name {
+    color: #222222 !important;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item:hover span.variant-name {
+    color: #000000 !important;
+    text-decoration: underline;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item.variant-active span.variant-name {
+    color: #000000 !important;
+    font-weight: 700 !important;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-add {
+    color: #444444 !important;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-add:hover {
+    color: #000000 !important;
 }
 
 div.scroll > div.phone-item div.variant-tree div.variant-item {
     display: flex;
     align-items: center;
 
-    min-height: 30px;
+    min-height: 28px;
     margin-top: 2px;
+    padding: 0 6px;
+    border-radius: 4px;
 
     font-size: 11px;
 }
 
+div.scroll > div.phone-item div.variant-tree div.variant-item.variant-active {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item.variant-active {
+    background: rgba(0, 0, 0, 0.12);
+}
+
 div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-name {
     display: inline-block;
-
-    padding: 5px 0 5px 10px;
-
-    color: var(--font-color-inputs);
+    padding: 4px 0 4px 4px;
+    color: #dddddd;
     cursor: pointer;
-}
-
-div.scroll > div.phone-item div.variant-tree div.variant-item:hover span.variant-name {
-    color: var(--font-color-primary);
-    text-decoration: underline;
-}
-
-div.scroll > div.phone-item div.variant-tree div.variant-item.variant-active span.variant-name {
-    color: var(--font-color-primary);
-    font-weight: 700;
-    cursor: default;
-    text-decoration: none;
-}
-
-div.scroll div[style*="border"] div.variant-tree div.variant-item.variant-active span.variant-name {
-    color: var(--font-color-secondary);
-}
-
-div.scroll div[style*="border"] div.variant-tree div.variant-item:hover span.variant-name {
-    color: var(--font-color-secondary);
+    font-weight: 400;
 }
 
 div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-add {
     display: inline-block;
-
-    padding: 2px 9px;
+    padding: 2px 8px;
     margin-left: auto;
-
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.2;
-
-    color: var(--font-color-inputs);
+    color: #bbbbbb;
     cursor: pointer;
-}
-
-div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-add:hover {
-    color: var(--font-color-primary);
-}
-
-div.scroll div[style*="border"] div.variant-tree div.variant-item span.variant-add {
-    color: var(--font-color-secondary);
-}
-
-div.scroll div[style*="border"] div.variant-tree div.variant-item span.variant-add:hover {
-    color: var(--font-color-secondary);
-}
-
-div.scroll div[style*="border"] div.variant-tree div.variant-item:hover span.variant-add {
-    color: var(--font-color-secondary);
+    font-weight: 600;
 }

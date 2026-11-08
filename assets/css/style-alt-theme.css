@@ -16,6 +16,7 @@
     --font-color-inputs: hsl(0, 0%, 50%);
 
     --graph-axis-text: hsl(0, 0%, 20%);
+    --graph-target-text: hsl(0, 0%, 45%);
     --graph-grid-line: hsl(0, 0%, 80%);
     --inspector-bg: hsl(0, 0%, 98%);
     --inspector-border: hsl(0, 0%, 80%);
@@ -51,6 +52,7 @@ body.theme-dark {
     --font-color-inputs: hsl(0, 0%, 60%);
 
     --graph-axis-text: hsl(0, 0%, 85%);
+    --graph-target-text: hsl(0, 0%, 65%);
     --graph-grid-line: hsl(0, 0%, 30%);
     --inspector-bg: hsl(0, 0%, 14%);
     --inspector-border: hsl(0, 0%, 35%);
@@ -86,6 +88,7 @@ body.theme-contrast {
     --font-color-inputs: hsl(0, 0%, 0%);
 
     --graph-axis-text: hsl(0, 0%, 0%);
+    --graph-target-text: hsl(0, 0%, 35%);
     --graph-grid-line: hsl(0, 0%, 50%);
     --inspector-bg: hsl(0, 0%, 100%);
     --inspector-border: hsl(0, 0%, 0%);

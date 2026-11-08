@@ -690,7 +690,7 @@ function drawLabels() {
         .join("g").attr("class","lineLabel").attr("opacity", 0);
     let t = g.append("text")
         .attrs({x:0, y:0})
-        .style("fill", c => (c.isTarget || (c.p && c.p.isTarget)) ? "var(--graph-axis-text)" : getTooltipColor(c).toString())
+        .style("fill", c => (c.isTarget || (c.p && c.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(c).toString())
         .style("font-size", fontSize + "px")
         .text(c=>c.id);
 
@@ -1342,13 +1342,18 @@ function loadFiles(p, callback) {
         return;
     }
 
-    // Smart Probe: Probe unnumbered and seatings 1..10 efficiently
+    // Smart Probe: Probe unnumbered and seatings 1..10 efficiently (supporting L1 and L 1)
     const maxSeatings = 10;
     let probes = [];
     LR.forEach(s => {
         probes.push(getParsedFile(DIR + p.fileName + " " + s));
         for (let i = 1; i <= maxSeatings; i++) {
-            probes.push(getParsedFile(DIR + p.fileName + " " + s + i));
+            probes.push(
+                getParsedFile(DIR + p.fileName + " " + s + i).then(function (data) {
+                    if (data !== null) return data;
+                    return getParsedFile(DIR + p.fileName + " " + s + " " + i);
+                })
+            );
         }
     });
 
@@ -1567,6 +1572,9 @@ function setCurves(p, avg, lr, samp, seating) {
     let y = 0;
     let k = d3.selectAll(".keyLine").filter(q => q === p);
     let ksb = k.select(".keySelBoth").attr("display", "none");
+    if (lr === undefined && avg === undefined) {
+        lr = p.lr;
+    }
     p.lr = lr;
     if (lr !== undefined) {
         p.activeCurves = (p.seating === "all") ? selCh(p.activeCurves, lr) : [p.activeCurves[lr]];
@@ -1817,6 +1825,15 @@ doc.select(".addLock").on("click", function () {
 });
 
 function showPhone(p, exclusive, suppressVariant, trigger) {
+    if (!p.copyOf && p.fileNames && p.fileNames.length && p.fileName !== p.fileNames[0]) {
+        p.fileName = p.fileNames[0];
+        p.dispName = (p.dispNames && p.dispNames[0]) ? p.dispNames[0] : p.fileNames[0];
+        if (p.vars && p.vars[p.fileName]) {
+            p.rawChannels = p.vars[p.fileName];
+        } else {
+            p.rawChannels = undefined;
+        }
+    }
     if (p.isTarget && activePhones.indexOf(p)!==-1) {
         removePhone(p);
         return;
@@ -1843,15 +1860,15 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         }
     }
     let keep = !exclusive ? (q=>true)
-             : (q => q.copyOf===p || q.pin || q.isTarget!==p.isTarget || q.isPrefBounds);
+             : (q => q===p || q.copyOf===p || q.pin || q.isTarget!==p.isTarget || q.isPrefBounds);
     if (!p.rawChannels) {
         if (p.isLoading) return;
         p.isLoading = true;
         loadFiles(p, function (ch) {
             p.isLoading = false;
             if (!ch) return;
-            if (p.rawChannels) return;
             p.rawChannels = ch;
+            if (p.vars) p.vars[p.fileName] = ch;
             showPhone(p, exclusive, suppressVariant, trigger);
             if (trigger) { scrollToActive(); }
             if (analyticsEnabled) { pushPhoneTag(phone_displayed, p, trigger); }
@@ -1866,21 +1883,25 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         if (baseline.p && !baseline.p.active) {
             if (baseline.p.phone != customTiltName && !dfBaseline) setBaseline(baseline0,1);
         }
+        let apRem = activePhones.filter(q => !q.isTarget && !q.isPrefBounds);
+        if (apRem.length === 1) {
+            setCurves(apRem[0], false, undefined);
+        }
     }
-    if (activePhones.indexOf(p)===-1 && (suppressVariant || !p.objs)) {
+    if (activePhones.indexOf(p)===-1) {
         let avg = false;
         if (!p.isTarget) {
             let ap = activePhones.filter(p => !p.isTarget && !p.isPrefBounds);
             avg = ap.length >= 1;
-            if (ap.length===1 && ap[0].activeCurves.length!==1) {
-                setCurves(ap[0], true);
+            if (avg && ap.length===1 && ap[0].activeCurves.length!==1) {
+                setCurves(ap[0], false, 1);
             }
             activePhones.push(p);
         } else {
             activePhones.unshift(p);
         }
         p.active = true;
-        setCurves(p, avg);
+        setCurves(p, false, avg ? 1 : undefined);
     }
     if (p.isTarget && tiltableTargets.includes(p.dispName)) { // Tilt the target
         if (p.dispName === "Fc-Construct DF-HRTF") {
@@ -1913,14 +1934,12 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
     updatePaths(trigger);
     updatePhoneTable();
     d3.selectAll("#phones .phone-item,.target")
-        .filter(p=>p && p.id!==undefined)
         .call(setPhoneTr);
     //Displays variant pop-up when phone displayed
-    if (!suppressVariant && p.fileNames && !p.copyOf && window.innerWidth > 1000) {
-        table.selectAll("tr").filter(q=>q===p).select(".variants").node().focus();
-    } else {
-        document.activeElement.blur();
+    if (!suppressVariant && !trigger && p.fileNames && !p.isTarget) {
+        setVariantTreeOpen(p.copyOf || p, true);
     }
+    document.activeElement.blur();
     if (extraEnabled && extraEQEnabled) {
         updateEQPhoneSelect();
     }
@@ -1944,20 +1963,102 @@ function removePhone(p) {
     p.active = p.pin = false; nextPN = null;
     activePhones = activePhones.filter(q => q.active);
     if (!p.isTarget) {
-        let ap = activePhones.filter(p => !p.isTarget);
+        let ap = activePhones.filter(p => !p.isTarget && !p.isPrefBounds);
         if (ap.length === 1) {
-            setCurves(ap[0], false);
+            setCurves(ap[0], false, undefined);
         }
     }
     updatePaths();
     if (baseline.p && !baseline.p.active && baseline.p != df) { setBaseline(baseline0); }
     updatePhoneTable();
-    d3.selectAll("#phones div,.target")
-        .filter(q=>q===(p.copyOf||p))
+    if (!p.isTarget && p.fileNames) {
+        let treeBase = p.copyOf || p;
+        if (treeBase.objs) {
+            treeBase.objs = treeBase.objs.filter(q => q.active);
+            if (treeBase.objs.length === 0) {
+                delete treeBase.objs;
+            }
+        }
+        let stillShown = activePhones.indexOf(treeBase) !== -1
+            || (treeBase.objs || []).some(q => q.active);
+        if (!stillShown) { setVariantTreeOpen(treeBase, false); }
+        else if (treeBase.treeOpen) { renderVariantTree(treeBase); }
+    }
+    d3.selectAll("#phones .phone-item,.target")
         .call(setPhoneTr);
     if (extraEnabled && extraEQEnabled) {
         updateEQPhoneSelect();
     }
+}
+
+function variantsFor(p) {
+    let base = p.copyOf || p;
+    let shown = (activePhones.indexOf(base) !== -1 ? [base] : [])
+        .concat(base.objs || [])
+        .filter(q => q.active);
+    return (p.fileNames || []).map((fileName, i) => {
+        let dispName = (p.dispNames || [])[i] || fileName;
+        return { fileName: fileName, dispName: dispName,
+                 activeObj: shown.find(q => q.fileName === fileName) || null };
+    });
+}
+
+function renderVariantTree(p) {
+    if (!p.fileNames) return;
+    let item = doc.select("#phones").selectAll("div.phone-item").filter(q => q === p),
+        tree = item.select(".variant-tree");
+    if (item.empty()) return;
+    if (!p.treeOpen) { tree.selectAll("div.variant-item").remove(); return; }
+    let rows = tree.selectAll("div.variant-item").data(variantsFor(p), d => d.fileName);
+    rows.exit().remove();
+    let enter = rows.enter().append("div")
+        .attr("class", "variant-item")
+        .attr("data-filename", d => d.fileName)
+        .on("click", function (d) { variantClickName(p, d); });
+    rows = enter.merge(rows);
+    rows.classed("variant-active", d => !!d.activeObj);
+    rows.selectAll("span.variant-name").data(d => [d]).join("span")
+        .attr("class", "variant-name").text(d => d.dispName);
+    rows.selectAll("span.variant-add").data(d => [d]).join("span")
+        .attr("class", "variant-add").text(d => d.activeObj ? "\u00D7" : "+")
+        .on("click", function (d) {
+            d3.event.stopPropagation();
+            d.activeObj ? removePhone(d.activeObj) : variantClickAdd(p, d);
+        });
+}
+
+function setVariantTreeOpen(p, open) {
+    if (!p || !p.fileNames) return;
+    p.treeOpen = open;
+    let item = doc.select("#phones").selectAll("div.phone-item").filter(q => q === p);
+    if (item.empty()) return;
+    item.select(".variant-tree").style("display", open ? "block" : null);
+    item.select(".tree-chevron").classed("tree-open", open);
+    renderVariantTree(p);
+}
+
+function variantClickName(base, d) {
+    d3.event.stopPropagation();
+    if (d.activeObj) return;
+    let shown = (activePhones.indexOf(base) !== -1 ? [base] : [])
+        .concat(base.objs || []).filter(q => q.active);
+    if (shown.length) {
+        let target = shown[0];
+        if (!target.vars) target.vars = base.vars || {};
+        target.vars[target.fileName] = target.rawChannels;
+        Object.assign(target, { fileName: d.fileName, dispName: d.dispName });
+        changeVariant(target, updateVariant, undefined);
+        renderVariantTree(base);
+    } else {
+        showVariant(base, d, undefined);
+        renderVariantTree(base);
+    }
+}
+
+function variantClickAdd(base, d) {
+    d3.event.stopPropagation();
+    showVariant(base, d, undefined);
+    renderVariantTree(base);
 }
 
 function asPhoneObj(b, p, isInit, inits) {
@@ -2114,6 +2215,21 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
                     .on("mouseout" , bg(false,p => p.id!==undefined?getDivColor(p.id,p.active,p.hexColor):null))
                     .call(setClicks(showPhone));
                 phoneDiv.append("span").text(p=>p.fullName);
+                let variantPhones = phoneDiv.filter(p => p.fileNames);
+                variantPhones.append("svg")
+                    .attr("class","tree-chevron")
+                    .attr("viewBox","-7 -9 24 25")
+                    .append("path").attr("fill","currentColor")
+                    .attr("d","M1 2L5 6L9 2L8 1L6 3Q5 4 4 3L2 1Z");
+                variantPhones.select(".tree-chevron")
+                    .on("mousedown", function () {
+                        d3.event.stopPropagation();
+                        d3.event.preventDefault();
+                    })
+                    .on("click", function (p) {
+                        d3.event.stopPropagation();
+                        setVariantTreeOpen(p, !p.treeOpen);
+                    });
                 // Adding the + selection button
                 phoneDiv.append("div")
                     .attr("class", "phone-item-add")
@@ -2121,7 +2237,11 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
                         d3.event.stopPropagation();
                         showPhone(p, 0);
                     });
+                variantPhones.append("div").attr("class","variant-tree");
            });
+        doc.select("#phones").selectAll("div.phone-item").each(function (p) {
+            if (p.fileNames && p.treeOpen) renderVariantTree(p);
+        });
     };
     updatePhoneSelect();
 
@@ -2547,13 +2667,13 @@ let graphInteract = imm => function () {
 
         // Update text colors and model name
         tt.select(".insp_name")
-            .style("fill", d => (d.isTarget || (d.p && d.p.isTarget)) ? "var(--graph-axis-text)" : getTooltipColor(d).toString())
+            .style("fill", d => (d.isTarget || (d.p && d.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(d).toString())
             .text(d => d.id);
 
         tt.select(".insp_val").selectAll("text")
             .style("fill", function() {
                 let parentDatum = d3.select(this.parentNode.parentNode).datum();
-                return (parentDatum.isTarget || (parentDatum.p && parentDatum.p.isTarget)) ? "var(--graph-axis-text)" : getTooltipColor(parentDatum).toString();
+                return (parentDatum.isTarget || (parentDatum.p && parentDatum.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(parentDatum).toString();
             });
 
         // Update dB numbers

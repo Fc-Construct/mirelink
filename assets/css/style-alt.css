@@ -1938,7 +1938,7 @@ div.select[data-selected="brands"] div.scrollOuter[data-list="models"] {
 }
 
 div.select[data-selected="brands"] div.scrollOuter[data-list="models"]:before {
-    opacity: 0.8;
+    opacity: 0.4;
     pointer-events: all;
     cursor: pointer;
 }
@@ -1952,7 +1952,7 @@ div.select[data-selected="models"] > div.selector-tabs button.models {
 }
 
 div.select[data-selected="models"] div.scrollOuter[data-list="brands"]:before {
-    opacity: 0.8;
+    opacity: 0.4;
     pointer-events: all;
     cursor: pointer;
 }
@@ -1993,8 +1993,7 @@ div.scroll > div:hover {
     text-decoration: underline;
 }
 
-div.scroll div.active,
-div.scroll div[style*="border"] {
+div.scroll div.active {
     background-color: var(--accent-color) !important;
     
     color: var(--font-color-secondary);

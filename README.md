@@ -13,9 +13,9 @@ This application is customized specifically for **open-canal MIRE headphone acou
 
 ---
 
-## 2. Key Upgrades & Changes Over Original Squiglink
+## 2. Key Upgrades & Changes Over Original Squiglink 
 
-### 1. Color-Blind Safe Color Palette and Consistency
+### 1. Color-Blind Safe Color Palette and Consistency 
 * **Color-Blind Safe HCL Palette**: Built with 12 perceptually uniform HCL hues calibrated to avoid red-green confusion and ensure high legibility.
 * **Anchor Color Stability**: The primary active headphone is always assigned Index 0 (Cobalt Blue). Remaining models receive a fixed, high-contrast sequence and dynamically retain their assigned color slots when models are deselected.
 * **Distinct Channel Lines**: Right channel is styled as a solid line (`─ R`) and Left channel as a dashed line (`- - L`), matched with explicit legend prefixes. Reference targets use fine dotted lines (`2, 4` at 55% opacity) to prevent clashing with left-channel dashes.

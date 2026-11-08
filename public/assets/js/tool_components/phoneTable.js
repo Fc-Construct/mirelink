@@ -10,22 +10,26 @@
 // --- Row styling + channel-box layout helpers ---
 function setPhoneTr(phtr) {
     phtr.each(function (p) {
-        p.highlight = p.active;
-        let o = p.objs; if (!o) return;
-        p.objs = o = o.filter(q=>q.active);
-        if (o.length === 0) {
-            delete p.objs;
-        } else if (!p.active) {
-            p.id = o[0].id;
+        if (!p) return;
+        let activeMember = (typeof activePhones !== 'undefined')
+            ? activePhones.find(q => q === p || q.copyOf === p || (p.objs && p.objs.includes(q)))
+            : null;
+        if (activeMember) {
             p.highlight = true;
+            p.activeId = activeMember.id !== undefined ? activeMember.id : p.id;
+        } else {
+            p.highlight = p.active || false;
+            p.activeId = p.id;
         }
     });
-    phtr.style("background",p=>p.isTarget&&!p.active?null:getDivColor(p.id,p.highlight,p.hexColor))
-        .style("border-color",p=>p.highlight?getDivColor(p.id,1,p.hexColor):null);
-    phtr.filter(p=>!p.isTarget)
+    phtr.classed("phone-highlighted", p => p && p.highlight)
+        .style("background", p => (!p || (p.isTarget && !p.active)) ? null : getDivColor(p.activeId !== undefined ? p.activeId : p.id, p.highlight, p.hexColor, p))
+        .style("border-color", p => (p && p.highlight) ? getDivColor(p.activeId !== undefined ? p.activeId : p.id, 1, p.hexColor, p) : null)
+        .style("color", p => (p && p.highlight) ? "#111111" : null);
+    phtr.filter(p => p && !p.isTarget)
         .select(".phone-item-add")
-        .selectAll(".remove").data(p=>p.highlight?[p]:[])
-        .join("span").attr("class","remove").text("⊗")
+        .selectAll(".remove").data(p => (p && p.highlight) ? [p] : [])
+        .join("span").attr("class", "remove").text("⊗")
         .on("click", p => { d3.event.stopPropagation(); removeCopies(p); });
 }
 
@@ -336,13 +340,12 @@ function addKey(s) {
     m.append("rect").attrs({"class":"keyMask", x:p=>channelbox_x(p.avg), y:-12, width:120, height:24, fill:"url(#blgrad)"});
     let t = s.append("g");
     t.append("path")
-        .attr("stroke", p => notMultichannel(p) ? getColor_AC({p:p})
-                                                : "url(#chgrad"+p.id+")");
+        .attr("stroke", p => getColor_AC({p:p}));
     t.selectAll().data(p=>p.isTarget?[]:LR)
         .join("text").attr("class","keyCLabel")
         .attrs({x:14+keyExt, y:(_,i)=>12*(i-(LR.length-1)/2),
                 dy:"0.32em", "text-anchor":"start", "font-size":10.5})
-        .text(t => t === "L" ? "- - L" : "─ R");
+        .text(t => t === "L" ? "L" : "R");
     t.filter(p=>p.isTarget).append("text")
         .attrs(keyExt?{x:7,y:6,"text-anchor":"middle"}
                      :{x:17,y:0,"text-anchor":"start"})
@@ -376,7 +379,7 @@ function addKey(s) {
     o.append("rect").attrs({x:0,y:-6,width:30,height:12,opacity:0});
     o.append("text").attrs({x:0, y:0, dy:"0.28em", "text-anchor":"start",
                             "font-size":7.5 })
-        .text("only");
+        .text("ONLY");
     s.append("text").attr("class","imbalance")
         .attrs({x:8,y:0,dy:"0.35em","font-size":10.5})
         .text("!");
@@ -463,7 +466,7 @@ function addModel(t) {
                 .style("left",(w+5)+"px")
                 .style("display",v=>v.active?"none":null);
             [d,c].forEach(e=>e.transition().style("top",(_,i)=>i*1.3+"em"));
-            d.filter(v=>!v.active).on("mousedown", v => Object.assign(p,v));
+            d.filter(v=>!v.active).on("mousedown", v => showVariant(q, v));
             c.on("mousedown", function (v) {
                 showVariant(q, v);
             });
@@ -486,8 +489,11 @@ function addModel(t) {
 }
 
 function updateVariant(p) {
-    updateKey(table.selectAll("tr").filter(q=>q===p).select(".keyLine"));
-    table.selectAll("tr").filter(q=>q===p).select(".seating-select")
+    let tr = table.selectAll("tr").filter(q=>q===p);
+    tr.attr("data-filename", p.fileName);
+    tr.select(".phonename").text(p.dispName);
+    updateKey(tr.select(".keyLine"));
+    tr.select(".seating-select")
         .each(function(q) { updateSeatingOptions(d3.select(this), q); });
     normalizePhone(p);
     updatePaths();
@@ -496,9 +502,20 @@ function changeVariant(p, update, trigger) {
     let fn = p.fileName,
         ch = p.vars[fn];
     function set(ch) {
+        let savedLr = p.lr;
+        let savedAvg = p.avg;
+        let savedSeating = p.seating;
+        if (savedLr === undefined && !savedAvg) {
+            let ap = (typeof activePhones !== 'undefined')
+                ? activePhones.filter(q => !q.isTarget && !q.isPrefBounds)
+                : [];
+            if (ap.length >= 2) {
+                savedLr = 1;
+            }
+        }
         p.rawChannels = ch; p.smooth = undefined;
         smoothPhone(p);
-        setCurves(p);
+        setCurves(p, savedAvg, savedLr, undefined, savedSeating);
         update(p, 0, 0, trigger);
     }
     if (ch) {
@@ -669,7 +686,7 @@ function makeColorPicker(elt) {
 function colorPhones() {
     updatePaths();
     let c = p=>p.active?getDivColor(p.id,true,p.hexColor):null;
-    doc.select("#phones").selectAll("div")
+    doc.select("#phones").selectAll("div.phone-item")
         .style("background",c).style("border-color",c);
     let t = table.selectAll("tr").filter(p=>!p.isTarget)
         .style("color", c);
