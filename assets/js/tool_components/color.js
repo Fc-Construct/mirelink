@@ -17,34 +17,6 @@ const curatedPalette = [
 ];
 
 /**
- * Returns the base hue index for a phone object.
- * Based on the position of the headphone model in the current active activePhones list,
- * so the primary (first active) headphone is ALWAYS Index 0 (Blue).
- */
-function getPhoneBaseHueIndex(p) {
-    if (!p) return 0;
-    
-    // Check index of p directly or via copyOf in activePhones
-    if (typeof activePhones !== 'undefined' && activePhones.length) {
-        let activeDataPhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds);
-        let idx = activeDataPhones.indexOf(p);
-        if (idx === -1 && p.copyOf) {
-            idx = activeDataPhones.indexOf(p.copyOf);
-        }
-        if (idx === -1) {
-            // Find by brand and model match
-            idx = activeDataPhones.findIndex(q => q.phone === p.phone && q.dispName === p.dispName);
-        }
-        if (idx !== -1) {
-            return idx % curatedPalette.length;
-        }
-    }
-    
-    let fallbackId = (p.id !== undefined && !isNaN(p.id)) ? Math.abs(p.id) : 0;
-    return fallbackId % curatedPalette.length;
-}
-
-/**
  * Core curve color calculator:
  * Uses unified model hue, shared by both L & R channels, with seating shade variations.
  */
@@ -56,24 +28,21 @@ function getCurveColor(id, o, hex, curveObj) {
         return d3.hcl(360, 5, 66);
     }
 
-    let h, cVal, lVal;
-
-    let customHex = hex || (p && p.hexColor);
-    if (customHex) {
-        let hcl = d3.hcl(d3.rgb(customHex));
-        h = hcl.h;
-        cVal = isNaN(hcl.c) ? 0 : hcl.c;
-        lVal = isNaN(hcl.l) ? 68 : hcl.l;
-    } else {
-        let baseIdx = p ? getPhoneBaseHueIndex(p) : ((id !== undefined && !isNaN(id)) ? Math.abs(id) % curatedPalette.length : 0);
-        let baseColor = curatedPalette[baseIdx];
-        h = baseColor.h;
-        cVal = baseColor.c;
-        lVal = baseColor.l;
+    if (hex) {
+        let rgb = d3.rgb(hex);
+        let hcl = d3.hcl(rgb);
+        return d3.hcl(hcl.h, hcl.c, hcl.l);
     }
+
+    let baseIdx = (id !== undefined && !isNaN(id)) ? Math.abs(id) % curatedPalette.length : 0;
+    let baseColor = curatedPalette[baseIdx];
+    let h = baseColor.h;
+    let cVal = baseColor.c;
+    let lVal = baseColor.l;
 
     if (curveObj) {
         // Seating shade differentiation:
+        // Individual seatings (e.g. R1, R2, R3) share the model's base hue but use subtle lightness steps
         let sIdx = curveObj.sIdx;
         let sCount = curveObj.sCount || 3;
         if (sIdx !== undefined && !isNaN(sIdx) && sCount > 1) {
