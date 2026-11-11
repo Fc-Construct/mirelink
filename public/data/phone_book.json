@@ -324,52 +324,5 @@
         ]
       }
     ]
-  },
-  {
-    "name": "FiiO",
-    "phones": [
-      {
-        "name": "FT15",
-        "file": [
-          "FiiO FT15",
-          "FiiO FT15 G"
-        ],
-        "suffix": [
-          "",
-          "Glasses"
-        ]
-      },
-      {
-        "name": "FT15 Leather",
-        "file": [
-          "FiiO FT15 Leather",
-          "FiiO FT15 Leather G"
-        ],
-        "suffix": [
-          "",
-          "Glasses"
-        ]
-      }
-    ]
-  },
-  {
-    "name": "Hongshu",
-    "phones": [
-      {
-        "name": "EH-1",
-        "file": [
-          "Hongshu EH-1",
-          "Hongshu EH-1 G",
-          "Hongshu EH-1 Bass",
-          "Hongshu EH-1 Bass G"
-        ],
-        "suffix": [
-          "Stock",
-          "Stock Glasses",
-          "Bass",
-          "Bass Glasses"
-        ]
-      }
-    ]
   }
 ]

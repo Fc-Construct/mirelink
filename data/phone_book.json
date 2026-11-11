@@ -235,6 +235,17 @@
           "",
           "Glasses"
         ]
+      },
+      {
+        "name": "HD 600",
+        "file": [
+          "Sennheiser HD 600",
+          "Sennheiser HD 600 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
       }
     ]
   },
@@ -368,6 +379,76 @@
           "Stock Glasses",
           "Bass",
           "Bass Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "FiiO",
+    "phones": [
+      {
+        "name": "FT15",
+        "file": [
+          "FiiO FT15",
+          "FiiO FT15 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "FT15 Leather",
+        "file": [
+          "FiiO FT15 Leather",
+          "FiiO FT15 Leather G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "HE1000",
+    "phones": [
+      {
+        "name": "Unveiled",
+        "file": [
+          "HE1000 Unveiled",
+          "HE1000 Unveiled G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Hongshu",
+    "phones": [
+      {
+        "name": "EH-1",
+        "file": [
+          "Hongshu EH-1",
+          "Hongshu EH-1 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "EH-1 Bass",
+        "file": [
+          "Hongshu EH-1 Bass",
+          "Hongshu EH-1 Bass G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
         ]
       }
     ]
