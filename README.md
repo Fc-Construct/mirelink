@@ -24,35 +24,46 @@ This application is customized specifically for **open-canal MIRE headphone acou
 * **In-Memory Caching**: Parsed curve data and raw text files are cached in memory (`rawFileCache` and `parsedResultCache`) for zero-latency re-fetches.
 * **Idle Pre-loading**: An idle-time background prefetcher (`requestIdleCallback`) loads remaining library items during browser idle time for instant model switching.
 
-### 3. Parser
-* **Single Source of Truth**: Data is managed via raw `.txt` files dropped into `/data/`. An automated GitHub Action script (`update_phonebook.py`) parses files and updates `phone_book.json`.
-* **Channel & Seating Stemming**: Automatically detects channels (`L` / `R`) and seating numbers (`1..9`) at the end of filenames.
-* **Multi-Word Brand & Variant Discovery**: Handles multi-word brand names (`Audio Technica`, `Dan Clark Audio`, etc.) and extracts variants dynamically using parenthetical tags `(...)` or keyword tokens (e.g. `G` $\rightarrow$ `Glasses`).
+### 3. Parser (Hybrid Approach & `update_phonebook.py`)
+* **Hybrid Source of Truth (`phone_book.json`)**: Utilizes `phone_book.json` as the primary curated source of truth. This preserves manual curation, custom ordering, and unique model/variant naming hierarchies without algorithmic misclassifications.
+* **Automated Python Sync (`update_phonebook.py`)**:
+  * **Directory Scanning**: Scans the `/data/` directory for raw headphone measurement `.txt` files (supporting both compact `L1`/`R1` and spaced `L 1`/`R 1` channel/seating naming conventions).
+  * **Non-Destructive Merging**: Compares parsed measurement file prefixes against existing phonebook entries. It leaves all existing manual entries completely intact while cleanly discovering and appending new models, brands, or variants (such as eyeglasses or pad variants).
+  * **Static Mirroring**: Automatically writes merged updates to `data/phone_book.json` and mirrors them to `public/data/phone_book.json` for static runtime access.
+* **Runtime Loading & Caching (`config.js` & `graphtool.js`)**:
+  * Configured via `PHONE_BOOK = "./data/phone_book.json"` in `assets/js/config.js`.
+  * At runtime, `graphtool.js` asynchronously fetches `phone_book.json` to populate the sidebar brand and model lists.
+  * **In-Memory Caching & Pre-loading**: Parsed curve data and raw files are cached in memory (`rawFileCache`, `parsedResultCache`), paired with background idle pre-loading (`requestIdleCallback`) to ensure zero-latency model switching.
+* **Channel & Seating Stemming**: Automatically parses channels (`L` / `R`) and seating numbers (`1..9`) at the end of filenames.
 
-### 4. Smoothing Detection
+### 4. Nested Tree Sidebar Navigation & Theme Compatibility
+* **Collapsible Variant Trees**: Introduced an interactive nested tree system in the sidebar featuring animated chevron indicators (`svg.tree-chevron`). Users can expand/collapse headphone entries to reveal individual variants (e.g., Stock vs. Glasses variants).
+* **Robust Theme Integration**: Fully dynamized sidebar and variant tree styles across Light, Dark (`theme-dark`), and Contrast modes. Selected cards, unselected containers, active variant pills (`--tree-active-pill-bg`), and text contrast adapt cleanly without blackouts or pastel artifacts.
+
+### 5. Smoothing Detection
 * **Header Metadata Inspection**: Reads header comments in exported REW text files upon load.
 * **Warning Indicators**: Non-standard or missing smoothing (e.g., `1/12 octave` or `None`) displays a subtle `⚠️` warning badge with a descriptive tooltip, while standard `1/6 octave` acoustic measurements remain badge-free.
 
-### 5. Dynamic Custom Reference Views
+### 6. Dynamic Custom Reference Views
 * **Live Preference Tuning**: Adjusting Tilt (dB/Oct), Bass Shelf, Treble, or Ear Gain dynamically generates a custom reference target.
 * **Custom Reference View Pills**: Save custom target configurations as numbered presets (`CUSTOM 1`, `CUSTOM 2`), double-click to rename in-place, or delete custom target pills.
 * **Presets**: Defaults to `10 dB downwards tilt` (-1 dB/Oct slope) on load, with quick toggles to flat `Fc-Construct DF-HRTF` or preference bounds.
 
-### 6. Calculate Functionality
+### 7. Calculate Functionality
 * **Band Selection Brush**: Click the **`∫ calculate`** tool button and drag across any frequency range ($f_0 \rightarrow f_1$) on the graph canvas.
 * **Log-Weighted Difference**: Computes the log-frequency-weighted average decibel difference (or mean level) between selected channels/models across the chosen band (e.g. `Avg Diff: 1.45 dB` over `200 Hz – 1.0 kHz`).
 * **Precise Graph Bounding**: Calculate selection brush is structurally constrained between the top graph grid line (`pad.t + 10`) and bottom frame (`pad.t + H`), preventing overflow into the header.
 
-### 7. Adaptive Multi-Column Label Layout & Logarithmic Tilt Math
+### 8. Adaptive Multi-Column Label Layout & Logarithmic Tilt Math
 * **Dynamic Multi-Column Label Stacking**: Automatically stacks active model curves into neat columns (up to 8 models in the bottom-left zone; 9+ models spilling into the top-left open whitespace zone). This allows for up to 16 models to be labeled nicely.
 * **Precise Text & Width Measurement**: Computes rendered text bounding box widths (`getBBox().width + 14px`) dynamically to prevent overlaps or awkward gaps, with automatic font-size downscaling (`12.5px` $\rightarrow$ `11px` $\rightarrow$ `10px`) for large model counts.
 * **SVG Layer Isolation**: Separates static curve labels (`g.labels-layer`) from interactive overlays (`g.tools-layer`), entirely eliminating label jumping when toggling Inspect or Calculate tools.
 * **Logarithmic Tilt Representation Note**: The $-1\text{ dB/Octave}$ tilt uses logarithmic scaling (`tilt * Math.log2(frequency / referenceFrequency)`). While a symmetric $\pm 5\text{ dB}$ split between 20 Hz and 20 kHz requires the reference pivot to be at the geometric mean ($f_{\text{geometric}} = \sqrt{20 \times 20,000} \approx 632.46\text{ Hz}$), the target curves anchor at the industry-standard **1 kHz (1000 Hz)** reference point, yielding $+5.64\text{ dB}$ at 20 Hz and $-4.32\text{ dB}$ at 20 kHz.
 
-### 8. Inspect Tool Graph Box Bounding
+### 9. Inspect Tool Graph Box Bounding
 * **Graph Box Bounding Math**: Computes the exact rendered SVG bounding box (`getBBox()`) of active inspection labels and clamps the container's horizontal position (`dx`) between graph padding boundaries (`pad.l` and `pad.l + W`). As the cursor line moves all the way to 20 Hz or 20 kHz, the inspection text block locks cleanly against the left or right edge without overflowing the graph box.
 
-### 9. Theme modes, Save Button & Export Upgrades
+### 10. Theme Modes, Screenshot Button & 4K 16:9 Transparent Export
 * **Semantic Theming & Default Dark Mode**: 
   * Configured **Dark Mode (`theme-dark`)** as the default application theme on load.
   * Introduced semantic CSS custom properties (`--graph-axis-text`, `--graph-grid-line`, `--inspector-bg`, `--inspector-border`, `--inspector-text`) ensuring crystal-clear readability and high contrast across Light, Dark, and Contrast modes.
@@ -60,16 +71,31 @@ This application is customized specifically for **open-canal MIRE headphone acou
 * **Clean Legend Labels (No Bounding Boxes & Color Sync)**:
   * Removed rectangular background bounding boxes (`g.lineLabel rect`) behind bottom legend labels, styling them as clean, borderless text matching the minimalist inspect tool aesthetic.
   * Synchronized custom color picker hex values so that selecting a custom color updates graph lines, AVG buttons, and model labels consistently.
-* **Renamed Screenshot Button to "Save"**:
-  * Updated `#download` and `#download-faux` buttons from "screenshot" / "Screenshot" to **"save" / "Save"**.
+* **Screenshot Button & 4K 16:9 Transparent Export**:
+  * Added a dedicated **Screenshot** button directly alongside the **Save** button in the toolbar.
+  * Configured both **Save** and **Screenshot** buttons to export high-resolution **4K 16:9 (`3840 × 2160`)** PNGs using an in-memory canvas compositor.
+  * **Transparent Margins**: The margins surrounding the graph are rendered with **full transparency (`rgba(0,0,0,0)`)**, providing exact 4K 16:9 framing consistency for video editors and slide decks while preserving the native acoustic graph aspect ratio.
 * **Theme-Aware Save / Export Passthrough**:
   * Enhanced `saveGraph()` and `saveSvgAsPng` to dynamically forward active theme classes (`theme-dark`, `theme-contrast`, `theme-default`), active background colors, and CSS custom property variables into exported PNGs and SVGs.
 * **Dynamic Filename Alignment**:
   * Exported filenames automatically align to the active models and comparison state currently rendered on screen via `getDynamicFilename(ext)`. 
 
-### 10. Development Sandbox & Asset Mirroring Architecture
+### 11. Development Sandbox & Asset Mirroring Architecture
 * **The `/public/` Folder**: In the Gemini AI Studio preview environment, the `/public/` directory acts as the static serving root for web assets and scripts.
 * **Automated Asset Mirroring (`autoSyncAssetsPlugin`)**: To prevent manual file duplication, a custom Vite plugin (`autoSyncAssetsPlugin` in `vite.config.ts`) automatically mirrors all files and subdirectories from `/assets/` directly into `/public/assets/` (along with `README.md`) upon dev server startup, build start, and page requests. Developers can edit or add assets exclusively in `/assets/` with instant synchronization.
+
+### 12. Unified Channel & Seating Dual-Pill Controls
+* **Three Independent Semantic Pills**: Split into **`Left`**, **`Right`**, and **`L+R`** control pills for granular multi-channel management.
+* **Dual-Action Pill Architecture**:
+  * **Text Button**: Clicking the text directly (e.g. `LEFT: AVG` $\rightarrow$ `LEFT: ALL`) cycles between average view and all seating curves.
+  * **Chevron Dropdown (`▾`)**: Opens a themed native dropdown to select specific individual seatings (`L1`, `L2`, `R1`, `Seat 1`, etc.), `AVG`, or `ALL`.
+* **Eye Visibility Toggle (`👁` / `⌣`)**: Each pill features an integrated eye toggle icon to independently show or hide that channel/variant.
+* **Non-Exclusive Channels**: Channels are not mutually exclusive; users can show `Left`, `Right`, and `L+R` averages simultaneously to visualize asymmetry and channel skews.
+* **Hover Isolation & Average Dimming**:
+  * Hovering over any individual channel pill isolates and highlights only that channel's curves on the graph (`.highlight` class).
+  * When `L+R` (AVG) is active, `Left` and `Right` curves automatically dim to 45% opacity to emphasize the primary average curve. Hovering over the `Left` or `Right` pill instantly restores their opacity on hover.
+* **Integrated Offset Control**: `OFFSET [ 0 ]` control integrated cleanly into the model control row.
+* **Legacy Layout Cleanup**: Removed legacy instruction rows and helper text (`⊕ LOCK`) for a cleaner UI.
 
 ---
 

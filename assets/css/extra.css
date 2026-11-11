@@ -5,6 +5,7 @@
 
 /** Extra buttons **/
 button#avg-all,
+button#screenshot-btn,
 button#yscalebtn {
   position: relative;
   
@@ -30,6 +31,7 @@ button#yscalebtn {
 }
 
 button#avg-all:active,
+button#screenshot-btn:active,
 button#yscalebtn:active {
   box-sizing: border-box;
   background-color: var(--accent-color) !important;
@@ -38,7 +40,8 @@ button#yscalebtn:active {
   color: var(--font-color-secondary);
 }
 
-button#avg-all {
+button#avg-all,
+button#screenshot-btn {
   margin-left: 6px;
 }
 
@@ -695,10 +698,9 @@ div.extra-panel div.filters-button > button[class="pink-noise selected"] {
   fill: var(--accent-color-contrast) !important;
 }
 
-/** seating selector dropdown **/
+/** seating selector dropdown (integrated directly into channel pills) **/
 tbody.curves > tr > td.seating {
-  order: 3;
-  padding: 0 0 0 8px;
+  display: none !important;
 }
 
 tbody.curves > tr > td.seating select {
@@ -890,8 +892,25 @@ div.scroll > div.phone-item svg.tree-chevron {
     transform-origin: center;
 }
 
+div.scroll > div.phone-item svg.tree-chevron path {
+    stroke: var(--card-unselected-text);
+}
+
+div.scroll > div.phone-item.phone-highlighted svg.tree-chevron path,
+div.scroll > div.phone-item[style*="border"] svg.tree-chevron path {
+    stroke: var(--card-highlight-text) !important;
+}
+
 div.scroll > div.phone-item svg.tree-chevron.tree-open {
     transform: rotate(180deg);
+}
+
+article.augment:empty {
+    display: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-height: 0 !important;
 }
 
 div.scroll > div.phone-item div.variant-tree {
@@ -907,64 +926,60 @@ div.scroll > div.phone-item div.variant-tree {
     border-radius: 4px;
 }
 
-/* Unselected expanded model tree in Dark Mode */
-body.theme-dark div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree {
-    border-left: 3px solid rgba(255, 255, 255, 0.25);
-    background: #1c1c1e;
+/* Unselected expanded model tree */
+div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree {
+    border-left: 3px solid var(--background-color-contrast-more);
+    background: var(--tree-bg-unselected);
 }
 
-body.theme-dark div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-name {
-    color: #dddddd;
+div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-name {
+    color: var(--font-color-primary);
 }
 
-body.theme-dark div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-add {
-    color: #bbbbbb;
+div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-add {
+    color: var(--font-color-primary);
+    opacity: 0.7;
 }
 
-/* Unselected expanded model tree in Light Mode */
-body.theme-default div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree {
-    border-left: 3px solid #888888;
-    background: #e8e8e8;
-}
-
-body.theme-default div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-name {
-    color: #222222;
-}
-
-body.theme-default div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item span.variant-add {
-    color: #555555;
-}
-
-body.theme-default div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item.variant-active span.variant-name {
-    color: #000000 !important;
-}
-
-/* Highlighted (selected/graphed) model tree in ALL modes */
-div.scroll > div.phone-item.phone-highlighted div.variant-tree {
-    border-left: 3px solid rgba(0, 0, 0, 0.3) !important;
-    background: rgba(0, 0, 0, 0.08) !important;
-}
-
-div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-name {
-    color: #222222 !important;
-}
-
-div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item:hover span.variant-name {
-    color: #000000 !important;
-    text-decoration: underline;
-}
-
-div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item.variant-active span.variant-name {
-    color: #000000 !important;
+div.scroll > div.phone-item:not(.phone-highlighted) div.variant-tree div.variant-item.variant-active span.variant-name {
+    color: var(--font-color-primary) !important;
     font-weight: 700 !important;
 }
 
-div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-add {
-    color: #444444 !important;
+/* Highlighted (selected/graphed) model tree in ALL modes */
+div.scroll > div.phone-item.phone-highlighted div.variant-tree,
+div.scroll > div.phone-item[style*="border"] div.variant-tree {
+    border-left: 3px solid var(--background-color-contrast-more) !important;
+    background: var(--tree-bg-selected) !important;
 }
 
-div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-add:hover {
-    color: #000000 !important;
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-name,
+div.scroll > div.phone-item[style*="border"] div.variant-tree div.variant-item span.variant-name {
+    color: var(--tree-inactive-text) !important;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item:hover span.variant-name,
+div.scroll > div.phone-item[style*="border"] div.variant-tree div.variant-item:hover span.variant-name {
+    color: var(--tree-active-text) !important;
+    text-decoration: underline;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item.variant-active span.variant-name,
+div.scroll > div.phone-item[style*="border"] div.variant-tree div.variant-item.variant-active span.variant-name {
+    color: var(--tree-active-text) !important;
+    font-weight: 700 !important;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-add,
+div.scroll > div.phone-item[style*="border"] div.variant-tree div.variant-item span.variant-add {
+    color: var(--tree-inactive-text) !important;
+    opacity: 0.8;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item span.variant-add:hover,
+div.scroll > div.phone-item[style*="border"] div.variant-tree div.variant-item span.variant-add:hover {
+    color: var(--tree-active-text) !important;
+    opacity: 1;
 }
 
 div.scroll > div.phone-item div.variant-tree div.variant-item {
@@ -983,8 +998,9 @@ div.scroll > div.phone-item div.variant-tree div.variant-item.variant-active {
     background: rgba(255, 255, 255, 0.12);
 }
 
-div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item.variant-active {
-    background: rgba(0, 0, 0, 0.12);
+div.scroll > div.phone-item.phone-highlighted div.variant-tree div.variant-item.variant-active,
+div.scroll > div.phone-item[style*="border"] div.variant-tree div.variant-item.variant-active {
+    background: var(--tree-active-pill-bg) !important;
 }
 
 div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-name {

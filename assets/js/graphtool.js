@@ -43,6 +43,7 @@ doc.html(`
         <div class="copy-url">
           <button id="copy-url">Copy URL</button>
           <button id="download-faux">Save</button>
+          <button id="screenshot-btn">Screenshot</button>
           <button id="avg-all">Average All</button>
         </div>
 
@@ -132,12 +133,6 @@ doc.html(`
             <col class="lastColumn">
           </colgroup>
           <tbody class="curves"></tbody>
-          <tr class="addPhone">
-            <td class="addButton">⊕</td>
-            <td class="helpText" colspan="5">(or middle/ctrl-click when selecting; or pin other IEMs)</td>
-            <td class="addLock">LOCK</td>
-          </tr>
-          <tr class="mobile-helper"></tr>
         </table>
       </div>
 
@@ -908,8 +903,7 @@ function getDynamicFilename(ext) {
     return comparisonString + " Fc-Construct MIRE." + ext;
 }
 
-function saveGraph(ext) {
-    let fn = {png:saveSvgAsPng, svg:saveSvg}[ext];
+function prepareGraphForExport() {
     let showControls = s => dB.all.attr("visibility",s?null:"hidden");
     gpath.selectAll("path").classed("highlight",false);
     drawLabels();
@@ -942,21 +936,131 @@ function saveGraph(ext) {
         if (val) svgNode.style.setProperty(prop, val);
     });
 
+    return {
+        svgNode: svgNode,
+        bgColor: bgColor,
+        restore: () => {
+            showControls(true);
+            svgNode.setAttribute("class", originalSvgClass);
+        }
+    };
+}
+
+function compositeGraphToCanvas(svgUri, bgColor, targetW = 3840, targetH = 2160) {
+    return new Promise((resolve, reject) => {
+        let img = new Image();
+        img.onload = () => {
+            let canvas = document.createElement("canvas");
+            canvas.width = targetW;
+            canvas.height = targetH;
+            let ctx = canvas.getContext("2d");
+
+            // Transparent margins for 16:9 4K container
+            ctx.clearRect(0, 0, targetW, targetH);
+
+            // Scale to fit target dimensions while preserving native graph aspect ratio
+            let scale = Math.min(targetW / img.width, targetH / img.height);
+            let drawW = Math.round(img.width * scale);
+            let drawH = Math.round(img.height * scale);
+            let drawX = Math.round((targetW - drawW) / 2);
+            let drawY = Math.round((targetH - drawH) / 2);
+
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+            resolve(canvas);
+        };
+        img.onerror = err => reject(err);
+        img.src = svgUri;
+    });
+}
+
+function saveGraph(ext) {
+    let prep = prepareGraphForExport();
     let filename = getDynamicFilename(ext);
-    fn(svgNode, filename, {
-        scale: 3,
-        backgroundColor: bgColor
-    }).then(() => {
-        showControls(true);
-        svgNode.setAttribute("class", originalSvgClass);
+
+    if (ext === "svg") {
+        saveSvg(prep.svgNode, filename, {
+            scale: 3,
+            backgroundColor: prep.bgColor
+        }).then(() => {
+            prep.restore();
+        }).catch(err => {
+            prep.restore();
+            console.error("Error saving SVG:", err);
+        });
+        if (analyticsEnabled) { pushEventTag("clicked_download", targetWindow); }
+        return;
+    }
+
+    // Default to 4K 16:9 PNG
+    let targetW = 3840, targetH = 2160;
+    let exportScale = targetW / 800;
+
+    svgAsPngUri(prep.svgNode, {
+        scale: exportScale,
+        backgroundColor: prep.bgColor
+    }).then(uri => {
+        prep.restore();
+        return compositeGraphToCanvas(uri, prep.bgColor, targetW, targetH);
+    }).then(canvas => {
+        canvas.toBlob(blob => {
+            if (!blob) throw new Error("Failed to generate image blob");
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement("a");
+            a.download = filename;
+            a.href = url;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+        }, "image/png");
     }).catch(err => {
-        showControls(true);
-        svgNode.setAttribute("class", originalSvgClass);
+        prep.restore();
         console.error("Error saving graph:", err);
     });
-    
-    // Analytics event
+
     if (analyticsEnabled) { pushEventTag("clicked_download", targetWindow); }
+}
+
+function copyGraphScreenshot() {
+    let prep = prepareGraphForExport();
+    let screenshotBtn = document.querySelector("button#screenshot-btn");
+    let targetW = 3840, targetH = 2160;
+    let exportScale = targetW / 800;
+
+    svgAsPngUri(prep.svgNode, {
+        scale: exportScale,
+        backgroundColor: prep.bgColor
+    }).then(uri => {
+        prep.restore();
+        return compositeGraphToCanvas(uri, prep.bgColor, targetW, targetH);
+    }).then(canvas => {
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(blob => {
+                if (!blob) return reject(new Error("Failed to generate image blob"));
+                resolve(blob);
+            }, "image/png");
+        });
+    }).then(blob => {
+        if (navigator.clipboard && window.ClipboardItem) {
+            return navigator.clipboard.write([
+                new ClipboardItem({ "image/png": blob })
+            ]);
+        } else {
+            throw new Error("Clipboard API not supported");
+        }
+    }).then(() => {
+        if (screenshotBtn) {
+            screenshotBtn.classList.add("clicked");
+            setTimeout(() => {
+                screenshotBtn.classList.remove("clicked");
+            }, 600);
+        }
+    }).catch(err => {
+        prep.restore();
+        console.error("Error copying screenshot to clipboard:", err);
+    });
+
+    if (analyticsEnabled) { pushEventTag("clicked_screenshot", targetWindow); }
 }
 doc.select("#download")
     .on("click", () => saveGraph("png"))
@@ -1483,7 +1587,11 @@ let gpath = gr.insert("g",".dBScaler")
     .attr("class", "curves-g")
     .attr("mask","url(#graphFade)");
 function hl(p, h) {
-    gpath.selectAll("path").filter(c=>c.p===p).classed("highlight",h);
+    if (typeof h === "function") {
+        gpath.selectAll("path").filter(c => c.p === p).classed("highlight", c => !!h(c));
+    } else {
+        gpath.selectAll("path").filter(c => c.p === p).classed("highlight", !!h);
+    }
 }
 let table = doc.select(".curves");
 
@@ -1496,113 +1604,150 @@ let table = doc.select(".curves");
 // assets/js/phoneTable.js.
 
 function setCurves(p, avg, lr, samp, seating) {
-    if (avg === undefined) avg = p.avg;
     if (p.is90Bounds) avg = false;
-    if (seating !== undefined) p.seating = seating;
-    if (p.seating === undefined) p.seating = "avg";
+    let n = Math.floor((p.channels ? p.channels.length : 0) / LR.length);
+    if (n < 1) n = 1;
 
-    let n = Math.floor(p.channels.length / LR.length);
-
-    if (samp !== undefined) {
-        p.samp = samp;
-        if (samp) {
-            p.seating = "all";
-            avg = false;
-        } else if (p.seating === "all") {
-            p.seating = "avg";
-        }
-    } else if (p.seating === "all") {
-        samp = true;
-        p.samp = true;
+    // Initialize or migrate p.channelState if missing
+    if (!p.channelState) {
+        let isSoloRight = (lr === 1);
+        let isBothAvg = (avg === true || p.avg === true);
+        p.channelState = {
+            L: { visible: !isSoloRight && !isBothAvg, seating: p.seating || "avg" },
+            R: { visible: true, seating: p.seating || "avg" },
+            LR: { visible: isBothAvg, seating: p.seating || "avg" }
+        };
     } else {
-        samp = false;
-        p.samp = false;
-    }
-
-    let dx = +avg - +p.avg,
-        selCh = (l, i) => l.slice(i * n, (i + 1) * n);
-    p.avg = avg;
-
-    if (!p.isTarget) {
-        let id = getChannelName(p),
-            v = cs => cs.filter(c => c !== null),
-            cs = p.channels,
-            cv = v(cs),
-            mc = cv.length > 1,
-            pc = (idstr, l, oi, extra) => Object.assign({ id: id(idstr), l: l, p: p, o: oi === undefined ? 0 : getO(oi) }, extra || {});
-
-        let seatNum = parseInt(p.seating, 10);
-        if (!isNaN(seatNum) && seatNum >= 1 && seatNum <= n) {
-            // Specific individual seating selected (1, 2, 3...)
-            let k = seatNum - 1;
-            if (avg && mc) {
-                let seatCurves = LR.map((_, i) => p.channels[i * n + k]).filter(c => c !== null);
-                p.activeCurves = [pc("AVG " + seatNum, avgCurves(seatCurves), undefined, { channel: "AVG", sIdx: k, sCount: n })];
-            } else {
-                p.activeCurves = LR.map((_, i) => {
-                    let idx = i * n + k;
-                    let label = (p.sampleLabels && p.sampleLabels[idx]) ? p.sampleLabels[idx] : (LR[i] + seatNum);
-                    return pc(label, p.channels[idx], i, { channel: LR[i], chIdx: i, sIdx: k, sCount: n });
-                }).filter(c => c.l);
+        // Handle explicit legacy parameter calls (e.g. from showPhone, removePhone, #avg-all)
+        if (lr !== undefined) {
+            if (lr === 0) {
+                p.channelState.L.visible = true;
+                p.channelState.R.visible = false;
+                p.channelState.LR.visible = false;
+            } else if (lr === 1) {
+                p.channelState.L.visible = false;
+                p.channelState.R.visible = true;
+                p.channelState.LR.visible = false;
+            } else if (lr === null || lr === undefined) {
+                p.channelState.L.visible = true;
+                p.channelState.R.visible = true;
+                p.channelState.LR.visible = false;
             }
-        } else if (p.seating === "all" && mc) {
-            // All seatings overlaid
-            p.activeCurves = cs.map((l, i) => {
-                let j = Math.floor(i / n);
-                let seatIdx = i % n;
-                let label = (p.sampleLabels && p.sampleLabels[i]) ? p.sampleLabels[i] : (LR[j] + (seatIdx + 1));
-                return pc(label, l, j, { channel: LR[j], chIdx: j, sIdx: seatIdx, sCount: n });
-            }).filter(c => c.l);
-        } else {
-            // Default: average across all seatings
-            p.activeCurves = (avg && mc)
-                ? [pc("AVG", avgCurves(cv), undefined, { channel: "AVG", sIdx: 0, sCount: 1 })]
-                : (!samp && mc)
-                    ? LR.map((l, i) => pc(i === 0 ? "- - L" : "─ R", avgCurves(v(selCh(cs, i))), i, { channel: LR[i], chIdx: i, sIdx: 0, sCount: 1 }))
-                    : cs.map((l, i) => {
-                        let j = Math.floor(i / n);
-                        let seatIdx = i % n;
-                        let label = (p.sampleLabels && p.sampleLabels[i]) ? p.sampleLabels[i] : (LR[j] + (seatIdx + 1));
-                        return pc(label, l, j, { channel: LR[j], chIdx: j, sIdx: seatIdx, sCount: n });
-                    }).filter(c => c.l);
-        }    } else {
+        } else if (avg !== undefined) {
+            if (avg) {
+                p.channelState.L.visible = false;
+                p.channelState.R.visible = false;
+                p.channelState.LR.visible = true;
+            } else if (!p.channelState.L.visible && !p.channelState.R.visible) {
+                p.channelState.L.visible = true;
+                p.channelState.R.visible = true;
+                p.channelState.LR.visible = false;
+            }
+        }
+        if (seating !== undefined) {
+            p.channelState.L.seating = seating;
+            p.channelState.R.seating = seating;
+            p.channelState.LR.seating = seating;
+        } else if (samp !== undefined) {
+            let sMode = samp ? "all" : "avg";
+            p.channelState.L.seating = sMode;
+            p.channelState.R.seating = sMode;
+            p.channelState.LR.seating = sMode;
+        }
+    }
+
+    // Sync legacy properties on p so existing external helpers don't break
+    p.avg = !!p.channelState.LR.visible;
+    if (p.channelState.L.visible && !p.channelState.R.visible && !p.channelState.LR.visible) {
+        p.lr = 0;
+    } else if (!p.channelState.L.visible && p.channelState.R.visible && !p.channelState.LR.visible) {
+        p.lr = 1;
+    } else {
+        p.lr = undefined;
+    }
+    p.seating = p.channelState.LR.visible ? p.channelState.LR.seating
+             : (p.channelState.R.visible ? p.channelState.R.seating : p.channelState.L.seating);
+
+    // Build p.activeCurves
+    if (p.isTarget) {
         p.activeCurves = [{ id: p.fullName, l: p.channels[0], p: p, o: 0 }];
+    } else {
+        let id = getChannelName(p),
+            pc = (idstr, l, oi, extra) => Object.assign({ id: id(idstr), l: l, p: p, o: oi === undefined ? 0 : getO(oi) }, extra || {});
+        let curves = [];
+        let state = p.channelState;
+
+        // 1. Left Channel
+        if (state.L && state.L.visible && p.channels) {
+            let st = state.L.seating;
+            let leftChannels = p.channels.slice(0, n).filter(c => c !== null);
+            if (st === "all" && n > 1) {
+                leftChannels.forEach((c, idx) => {
+                    let lbl = (p.sampleLabels && p.sampleLabels[idx]) ? p.sampleLabels[idx] : ("- - L" + (idx + 1));
+                    curves.push(pc(lbl, c, 0, { channel: "L", chIdx: 0, sIdx: idx, sCount: n }));
+                });
+            } else {
+                let seatNum = parseInt(st, 10);
+                if (!isNaN(seatNum) && seatNum >= 1 && seatNum <= n) {
+                    let c = p.channels[seatNum - 1];
+                    let lbl = (p.sampleLabels && p.sampleLabels[seatNum - 1]) ? p.sampleLabels[seatNum - 1] : ("- - L" + seatNum);
+                    curves.push(pc(lbl, c, 0, { channel: "L", chIdx: 0, sIdx: seatNum - 1, sCount: n }));
+                } else if (leftChannels.length > 0) {
+                    curves.push(pc("- - L", avgCurves(leftChannels), 0, { channel: "L", chIdx: 0, sIdx: 0, sCount: 1 }));
+                }
+            }
+        }
+
+        // 2. Right Channel
+        if (state.R && state.R.visible && p.channels) {
+            let st = state.R.seating;
+            let rightChannels = p.channels.slice(n, 2 * n).filter(c => c !== null);
+            if (st === "all" && n > 1) {
+                rightChannels.forEach((c, idx) => {
+                    let lbl = (p.sampleLabels && p.sampleLabels[n + idx]) ? p.sampleLabels[n + idx] : ("─ R" + (idx + 1));
+                    curves.push(pc(lbl, c, 1, { channel: "R", chIdx: 1, sIdx: idx, sCount: n }));
+                });
+            } else {
+                let seatNum = parseInt(st, 10);
+                if (!isNaN(seatNum) && seatNum >= 1 && seatNum <= n) {
+                    let c = p.channels[n + seatNum - 1];
+                    let lbl = (p.sampleLabels && p.sampleLabels[n + seatNum - 1]) ? p.sampleLabels[n + seatNum - 1] : ("─ R" + seatNum);
+                    curves.push(pc(lbl, c, 1, { channel: "R", chIdx: 1, sIdx: seatNum - 1, sCount: n }));
+                } else if (rightChannels.length > 0) {
+                    curves.push(pc("─ R", avgCurves(rightChannels), 1, { channel: "R", chIdx: 1, sIdx: 0, sCount: 1 }));
+                }
+            }
+        }
+
+        // 3. L+R Combined
+        if (state.LR && state.LR.visible && p.channels) {
+            let st = state.LR.seating;
+            let allValid = p.channels.filter(c => c !== null);
+            if (st === "all" && n > 1) {
+                for (let idx = 0; idx < n; idx++) {
+                    let pair = [p.channels[idx], p.channels[n + idx]].filter(c => c !== null);
+                    if (pair.length) {
+                        curves.push(pc("AVG " + (idx + 1), avgCurves(pair), undefined, { channel: "AVG", sIdx: idx, sCount: n }));
+                    }
+                }
+            } else {
+                let seatNum = parseInt(st, 10);
+                if (!isNaN(seatNum) && seatNum >= 1 && seatNum <= n) {
+                    let pair = [p.channels[seatNum - 1], p.channels[n + seatNum - 1]].filter(c => c !== null);
+                    curves.push(pc("AVG " + seatNum, avgCurves(pair), undefined, { channel: "AVG", sIdx: seatNum - 1, sCount: n }));
+                } else if (allValid.length > 0) {
+                    curves.push(pc("AVG", avgCurves(allValid), undefined, { channel: "AVG", sIdx: 0, sCount: 1 }));
+                }
+            }
+        }
+
+        p.activeCurves = curves;
     }
 
-    let y = 0;
-    let k = d3.selectAll(".keyLine").filter(q => q === p);
-    let ksb = k.select(".keySelBoth").attr("display", "none");
-    if (lr === undefined && avg === undefined) {
-        lr = p.lr;
+    // Refresh pills in the table row if phoneTable is active
+    if (typeof updateChannelPills === "function") {
+        updateChannelPills(p);
     }
-    p.lr = lr;
-    if (lr !== undefined) {
-        p.activeCurves = (p.seating === "all") ? selCh(p.activeCurves, lr) : [p.activeCurves[lr]];
-        y = [-1, 1][lr];
-        ksb.attr("display", null).attr("y", [0, -12][lr]);
-    }
-    k.select(".keyMask")
-        .transition().duration(400)
-        .attr("x", channelbox_x(avg))
-        .attrTween("y", function () {
-            let y0 = +this.getAttribute("y"),
-                y1 = 12 * (-1 + y);
-            if (!dx) { return d3.interpolateNumber(y0, y1); }
-            let ym = y0 + (y1 - y0) * (3 - 2 * dx) / 6;
-            y0 -= ym; y1 -= ym;
-            return t => { t -= 1 / 2; return ym + (t < 0 ? y0 : y1) * Math.pow(2, 20 * (Math.abs(t) - 1 / 2)); };
-        });
-    k.select(".keySel").attr("transform", channelbox_tr(avg));
-
-    // Update seating select dropdown value if present in row
-    d3.selectAll("tr").filter(q => q === p).select(".seating-select")
-        .property("value", p.seating || "avg");
-
-    // Update keySamp label text in SVG
-    let keySampText = p.seating === "all" ? (LR.length > 1 ? ("all " + n) : (n + " samples"))
-                    : (!isNaN(parseInt(p.seating, 10))) ? ("S" + p.seating)
-                    : "AVG";
-    k.selectAll(".keySampLabel").text(keySampText);
 }
 function updateCurves() {
     setCurves.apply(null, arguments);
@@ -1704,10 +1849,13 @@ function updatePaths(trigger) {
         .classed("sample", c=>c.p.samp);
     graphLines.attr("stroke", getColor_AC).call(redrawLine);
     
-    // Distinct Dash Patterns & Opacity:
-    // - Targets / Tilt: Fine Dotted ("2, 4") + 50% Opacity (Muted)
-    // - Left Channel (L): Bold Dashed ("6, 4")
-    // - Right Channel (R): Bold Solid ("none")
+    // Distinct Dash Patterns, Weights & Opacity:
+    // - Targets / Tilt: Fine Dotted ("2, 4") + 55% Opacity (Muted)
+    // - When AVG is active on a headphone:
+    //     - AVG curve: Bold Solid ("none"), 100% Opacity, 2.8px stroke width
+    //     - L & R curves: Dimmed (45% Opacity), 1.8px stroke width (L dashed "6, 4", R solid "none")
+    // - When AVG is inactive:
+    //     - L & R curves: Full 100% Opacity, 2.1px stroke width
     graphLines.each(function(d) {
         let pathElem = d3.select(this);
         if (d.p.isTarget || d.p.isPrefBounds) {
@@ -1716,26 +1864,34 @@ function updatePaths(trigger) {
             return;
         }
         
-        pathElem.style("stroke-opacity", 1.0);
         let ch = d.channel || (d.chIdx !== undefined ? (d.chIdx === 0 ? "L" : "R") : null);
-        if (ch === "L" || (d.id && d.id.indexOf(" (L") !== -1)) {
-            pathElem.style("stroke-dasharray", "6, 4");
-        } else if (d.p.dashStyle) {
-            pathElem.style("stroke-dasharray", d.p.dashStyle);
+        let isAvg = (ch === "AVG" || (d.id && d.id.indexOf("AVG") !== -1));
+        let isAvgActive = !!(d.p.channelState && d.p.channelState.LR && d.p.channelState.LR.visible);
+
+        if (isAvg) {
+            pathElem.style("stroke-opacity", 1.0);
+            pathElem.style("stroke-width", d.p.lineWeight ? (d.p.lineWeight * 1.3) : "2.8px");
+            pathElem.style("stroke-dasharray", d.p.dashStyle || "none");
         } else {
-            pathElem.style("stroke-dasharray", "none");
+            if (isAvgActive) {
+                pathElem.style("stroke-opacity", 0.45);
+                pathElem.style("stroke-width", d.p.lineWeight ? (d.p.lineWeight * 0.85) : "1.8px");
+            } else {
+                pathElem.style("stroke-opacity", 1.0);
+                pathElem.style("stroke-width", d.p.lineWeight || "2.1px");
+            }
+
+            if (ch === "L" || (d.id && d.id.indexOf(" (L") !== -1) || (d.id && d.id.indexOf("- - L") !== -1)) {
+                pathElem.style("stroke-dasharray", "6, 4");
+            } else if (d.p.dashStyle) {
+                pathElem.style("stroke-dasharray", d.p.dashStyle);
+            } else {
+                pathElem.style("stroke-dasharray", "none");
+            }
         }
     });
     let t = graphLines.filter(c=>c.p.isTarget).attr("class", "target");
     if (targetColorCustom) t.attr("stroke", targetColorCustom);
-    
-    let nodes = graphLines.nodes();
-    for (let i = 0; i < nodes.length; i++) {
-        let g = nodes[i].__data__;
-        if (g.p.lineWeight) {
-            d3.select(nodes[i]).style("stroke-width", g.p.lineWeight);
-        }
-    }
     if (ifURL && !trigger) addPhonesToUrl();
     if (stickyLabels) drawLabels();
 }
@@ -2200,8 +2356,7 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         .text(b => b.name + (b.suffix?" "+b.suffix:""))
         .call(setClicks(setBrand));
 
-    let bg = (h,fn) => function (p) {
-        d3.select(this).style("background", fn(p));
+    let bg = (h) => function (p) {
         (p.objs||[p]).forEach(q=>hl(q,h));
     }
     window.updatePhoneSelect = () => {
@@ -2211,8 +2366,8 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
                 let phoneDiv = enter.append("div")
                     .attr("class","phone-item")
                     .attr("name", p=>p.fullName)
-                    .on("mouseover", bg(true, p => getDivColor(p.id===undefined?nextPhoneNumber():p.id, true,p.hexColor)))
-                    .on("mouseout" , bg(false,p => p.id!==undefined?getDivColor(p.id,p.active,p.hexColor):null))
+                    .on("mouseover", bg(true))
+                    .on("mouseout" , bg(false))
                     .call(setClicks(showPhone));
                 phoneDiv.append("span").text(p=>p.fullName);
                 let variantPhones = phoneDiv.filter(p => p.fileNames);
@@ -2828,11 +2983,23 @@ function mapDownloadFaux() {
     let downloadButton = document.querySelector("button#download"),
         downloadFaux = document.querySelector("button#download-faux");
     
-    downloadFaux.addEventListener("click", function() {
-        downloadButton.click();
-    });
+    if (downloadFaux && downloadButton) {
+        downloadFaux.addEventListener("click", function() {
+            downloadButton.click();
+        });
+    }
 }
 mapDownloadFaux();
+
+function mapScreenshotBtn() {
+    let screenshotBtn = document.querySelector("button#screenshot-btn");
+    if (screenshotBtn) {
+        screenshotBtn.addEventListener("click", function() {
+            copyGraphScreenshot();
+        });
+    }
+}
+mapScreenshotBtn();
 
 // Set focused scroll list
 function setFocusedList(selectedList) {
@@ -2932,25 +3099,33 @@ function setFocusedPanel() {
         graphBox = document.querySelector("div.graph-sizer"),
         mobileHelper = document.querySelector("tr.mobile-helper");
     
-    panelsContainer.setAttribute("data-focused-panel","secondary");
-    
-    mobileHelper.addEventListener("click", function() {
+    if (panelsContainer) {
         panelsContainer.setAttribute("data-focused-panel","secondary");
-    });
-
-    secondaryPanel.addEventListener("click", function() {
-        panelsContainer.setAttribute("data-focused-panel","secondary");
-    });
+    }
     
-    graphBox.addEventListener("click", function() {
-        let previousState = panelsContainer.getAttribute("data-focused-panel");
-        
-        if ( previousState === "primary") {
+    if (mobileHelper && panelsContainer) {
+        mobileHelper.addEventListener("click", function() {
             panelsContainer.setAttribute("data-focused-panel","secondary");
-        } else if ( previousState === "secondary" ) {
-            panelsContainer.setAttribute("data-focused-panel","primary");
-        }
-    });
+        });
+    }
+
+    if (secondaryPanel && panelsContainer) {
+        secondaryPanel.addEventListener("click", function() {
+            panelsContainer.setAttribute("data-focused-panel","secondary");
+        });
+    }
+    
+    if (graphBox && panelsContainer) {
+        graphBox.addEventListener("click", function() {
+            let previousState = panelsContainer.getAttribute("data-focused-panel");
+            
+            if ( previousState === "primary") {
+                panelsContainer.setAttribute("data-focused-panel","secondary");
+            } else if ( previousState === "secondary" ) {
+                panelsContainer.setAttribute("data-focused-panel","primary");
+            }
+        });
+    }
     
     // Touch events
     let verticalSwipeTargets = document.querySelectorAll("div.selector-tabs, input.search");

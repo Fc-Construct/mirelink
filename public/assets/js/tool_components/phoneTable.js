@@ -23,9 +23,7 @@ function setPhoneTr(phtr) {
         }
     });
     phtr.classed("phone-highlighted", p => p && p.highlight)
-        .style("background", p => (!p || (p.isTarget && !p.active)) ? null : getDivColor(p.activeId !== undefined ? p.activeId : p.id, p.highlight, p.hexColor, p))
-        .style("border-color", p => (p && p.highlight) ? getDivColor(p.activeId !== undefined ? p.activeId : p.id, 1, p.hexColor, p) : null)
-        .style("color", p => (p && p.highlight) ? "#111111" : null);
+        .style("border-color", p => (p && p.highlight) ? getDivColor(p.activeId !== undefined ? p.activeId : p.id, 1, p.hexColor, p) : null);
     phtr.filter(p => p && !p.isTarget)
         .select(".phone-item-add")
         .selectAll(".remove").data(p => (p && p.highlight) ? [p] : [])
@@ -107,8 +105,7 @@ function updatePhoneTable() {
 
     let f = c.enter().append("tr").attr("data-filename", p=>p.fileName),
         td = () => f.append("td");
-    f   .call(setHover, h => p => hl(p,h))
-        .style("color", p => getDivColor(p.id,true,p.hexColor));
+    f.style("color", p => getDivColor(p.id,true,p.hexColor));
 
     td().attr("class","remove").text("⊗")
         .attr("title", "Remove graph")
@@ -131,8 +128,8 @@ function updatePhoneTable() {
     td().attr("class","curve-color").append("button")
         .style("background-color",p=>getColor_AC({p:p}))
         .call(makeColorPicker); // .filter(p=>!p.isTarget) if you want to exclude target from color picker
-    td().attr("class","channels").append("svg").call(addKey);
-    let sSel = f.filter(p=>!p.isTarget).append("td").attr("class","seating").append("select")
+    td().attr("class","channels").call(addChannelControls);
+    let sSel = f.filter(p=>!p.isTarget).append("td").attr("class","seating").style("display","none").append("select")
         .attr("class","seating-select")
         .attr("title","Select seating measurement (individual, average, or all)");
     sSel.each(function(p) { updateSeatingOptions(d3.select(this), p); });
@@ -141,9 +138,14 @@ function updatePhoneTable() {
         updateCurves(p, undefined, p.lr, val === "all", val);
         hl(p, true);
     });
-    td().attr("class","levels").append("input")
+    let levTd = td().attr("class","levels");
+    let offsetPill = levTd.append("div").attr("class", "offset-pill");
+    offsetPill.append("span").attr("class", "offset-pill-label").text("OFFSET");
+    offsetPill.append("input")
         .attrs({type:"number",step:"any",value:0})
         .property("value", p=>p.offset)
+        .attr("placeholder", "0")
+        .attr("title", "Offset: Add or subtract dB on the graph")
         .on("change input",function(p){ setOffset(p, +this.value); });
     let cSel = f.filter(p=>!p.isTarget).append("td").attr("class", "comp").append("select");
     cSel.selectAll("option").data(["<no comp>", ...compTargets])
@@ -319,103 +321,167 @@ function handleComp(p, opt) {
     }
 }
 
-// --- Per-row key line, variants, color picker popup, colorPhones ---
-function addKey(s) {
-    let dim={x:-19-keyLeft, y:-12, width:65+keyLeft, height:24}
-    s.attr("class","keyLine").attr("viewBox",[dim.x,dim.y,dim.width,dim.height].join(" "));
-    let defs = s.append("defs");
-    defs.append("linearGradient").attr("id", p=>"chgrad"+p.id)
-        .attrs({x1:0,y1:0, x2:0,y2:1})
-        .selectAll().data(p=>[0.1,0.4,0.6,0.9].map(o =>
-            [o, getCurveColor(p.id, o<0.3?-1:o<0.7?0:1,p.hexColor)]
-        )).join("stop")
-        .attr("offset",i=>i[0])
-        .attr("stop-color",i=>i[1]);
-    defs.append("linearGradient").attr("id","blgrad")
-        .selectAll().data([0,0.25,0.31,0.69,0.75,1]).join("stop")
-        .attr("offset",o=>o)
-        .attr("stop-color",(o,i) => i==2||i==3?"white":"#333");
-    let m = defs.append("mask").attr("id",p=>"chmask"+p.id);
-    m.append("rect").attrs(dim).attr("fill","#333");
-    m.append("rect").attrs({"class":"keyMask", x:p=>channelbox_x(p.avg), y:-12, width:120, height:24, fill:"url(#blgrad)"});
-    let t = s.append("g");
-    t.append("path")
-        .attr("stroke", p => getColor_AC({p:p}));
-    t.selectAll().data(p=>p.isTarget?[]:LR)
-        .join("text").attr("class","keyCLabel")
-        .attrs({x:14+keyExt, y:(_,i)=>12*(i-(LR.length-1)/2),
-                dy:"0.32em", "text-anchor":"start", "font-size":10.5})
-        .text(t => t === "L" ? "L" : "R");
-    t.filter(p=>p.isTarget).append("text")
-        .attrs(keyExt?{x:7,y:6,"text-anchor":"middle"}
-                     :{x:17,y:0,"text-anchor":"start"})
-        .attrs({dy:"0.32em", "font-size":8, fill:p=>getColor_AC({p:p})})
-        .text("Target");
-    let uchl = f => function (p) {
-        updateCurves(p, f(p)); hl(p,true);
-    }
-    s.append("rect").attr("class","keySelBoth")
-        .attrs({x:40+channelbox_x(0), width:40, height:12,
-                opacity:0, display:"none"})
-        .on("click", uchl(p=>0));
-    s.append("g").attr("class","keySel")
-        .attr("transform",p=>channelbox_tr(p.avg))
-        .on("click", uchl(p=>!p.avg))
-        .selectAll().data([0,80]).join("rect")
-        .attrs({x:d=>d, y:-12, width:40, height:24, opacity:0});
-    let o = s.filter(p=>!notMultichannel(p))
-        .selectAll().data(p=>[[p,0],[p,1]])
-        .join("g").attr("class","keyOnly")
-        .attr("transform",pi=>"translate(25,"+[-6,6][pi[1]]+")")
-        .call(setHover, h => function (pi) {
-            let p = pi[0], cs = p.activeCurves;
-            if (!p.hide && cs.length===2) {
-                d3.event.stopPropagation();
-                hl(p, h ? (c=>c===cs[pi[1]]) : true);
-                gpath.selectAll("path").filter(c=>c.p===p).attr("opacity",h ? (c=>c!==cs[pi[1]]?0.7:null) : null);
+// --- Per-row channel pills, variants, color picker popup, colorPhones ---
+const EYE_OPEN_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 3.5C4.5 3.5 1.5 6 0 8.5c1.5 2.5 4.5 5 8 5s6.5-2.5 8-5c-1.5-2.5-4.5-5-8-5zm0 8.2A3.2 3.2 0 1 1 8 5.3a3.2 3.2 0 0 1 0 6.4zm0-5A1.8 1.8 0 1 0 8 10.3 1.8 1.8 0 0 0 8 6.7z"/></svg>';
+const EYE_CLOSED_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"><path d="M2.5 7.5Q8 13.5 13.5 7.5" stroke-width="1.8" stroke-linecap="round"/><line x1="4.8" y1="10" x2="3.8" y2="12" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="11" x2="8" y2="13.5" stroke-width="1.4" stroke-linecap="round"/><line x1="11.2" y1="10" x2="12.2" y2="12" stroke-width="1.4" stroke-linecap="round"/></svg>';
+
+function addChannelControls(tdSelection) {
+    tdSelection.each(function(p) {
+        let td = d3.select(this);
+        if (p.isTarget) return;
+
+        let container = td.append("div").attr("class", "channel-pills-group");
+
+        const CHANNELS = [
+            { key: "L", label: "Left" },
+            { key: "R", label: "Right" },
+            { key: "LR", label: "L+R" }
+        ];
+
+        CHANNELS.forEach(ch => {
+            let pill = container.append("div")
+                .attr("class", "channel-pill")
+                .attr("data-channel", ch.key);
+
+            // 1. Eye Button
+            pill.append("button")
+                .attr("type", "button")
+                .attr("class", "pill-eye")
+                .attr("title", "Toggle " + ch.label + " visibility")
+                .on("click", function() {
+                    d3.event.stopPropagation();
+                    if (!p.channelState) setCurves(p);
+                    p.channelState[ch.key].visible = !p.channelState[ch.key].visible;
+                    updateCurves(p);
+                })
+                .append("span").attr("class", "pill-eye-icon");
+
+            // Divider
+            pill.append("div").attr("class", "pill-divider");
+
+            // 2. Cycle Label Button
+            pill.append("button")
+                .attr("type", "button")
+                .attr("class", "pill-label")
+                .attr("title", "Click to cycle AVG / ALL")
+                .on("click", function() {
+                    d3.event.stopPropagation();
+                    if (!p.channelState) setCurves(p);
+                    let curr = p.channelState[ch.key].seating;
+                    let next = (curr === "all") ? "avg" : "all";
+                    p.channelState[ch.key].seating = next;
+                    p.channelState[ch.key].visible = true; // Ensure visible when cycling
+                    updateCurves(p);
+                })
+                .append("span").attr("class", "pill-label-text");
+
+            // 3. Chevron Wrap with Native Select Overlay
+            let chevronWrap = pill.append("div")
+                .attr("class", "pill-chevron-wrap")
+                .attr("title", "Select seating for " + ch.label);
+
+            chevronWrap.append("span").attr("class", "pill-chevron-icon").text("▾");
+
+            let select = chevronWrap.append("select")
+                .attr("class", "pill-native-select")
+                .on("change", function() {
+                    let val = this.value;
+                    if (!p.channelState) setCurves(p);
+                    p.channelState[ch.key].seating = val;
+                    p.channelState[ch.key].visible = true;
+                    updateCurves(p);
+                });
+
+            // Populate options dynamically
+            let n = Math.floor(validChannels(p).length / LR.length);
+            if (n < 1) n = 1;
+            let options = [
+                { value: "avg", label: "AVG" + (n > 1 ? " (" + n + ")" : "") },
+                { value: "all", label: "ALL" + (n > 1 ? " (" + n + ")" : "") }
+            ];
+            for (let i = 1; i <= n; i++) {
+                let sLabel = ch.key === "L" ? ("L" + i) : (ch.key === "R" ? ("R" + i) : ("Seat " + i));
+                options.push({ value: String(i), label: sLabel });
             }
-        })
-        .on("click", pi => updateCurves(pi[0], false, pi[1]));
-    o.append("rect").attrs({x:0,y:-6,width:30,height:12,opacity:0});
-    o.append("text").attrs({x:0, y:0, dy:"0.28em", "text-anchor":"start",
-                            "font-size":7.5 })
-        .text("ONLY");
-    s.append("text").attr("class","imbalance")
-        .attrs({x:8,y:0,dy:"0.35em","font-size":10.5})
-        .text("!");
-    let a = s.filter(p=>!p.isTarget && Math.floor(validChannels(p).length/LR.length)>1);
-    if (a.size()) {
-        let n = p => Math.floor(validChannels(p).length/LR.length);
-        let t = a.append("text").attr("class","keySamp keySampLabel")
-            .attrs({x:-18.5-keyLeft, y:0, dy:"0.33em",
-                    "text-anchor":"start", "font-size":8, "font-weight":"bold",
-                    fill:"var(--font-color-primary)", cursor:"pointer"})
-            .text(p => p.seating === "all" ? (LR.length > 1 ? ("all " + n(p)) : (n(p) + " smp"))
-                     : (!isNaN(parseInt(p.seating, 10))) ? ("S" + p.seating)
-                     : "AVG");
-        a.append("rect")
-            .attrs({x:-19-keyLeft, y:-12, width:keyLeft?20:38, height:24, opacity:0, cursor:"pointer"})
-            .attr("title", "Click to cycle seatings (AVG -> S1 -> S2... -> ALL)")
-            .on("click", p => cycleSeating(p));
+            select.selectAll("option").data(options)
+                .enter().append("option")
+                .attr("value", d => d.value)
+                .text(d => d.label);
+
+            // Channel-specific hover highlighting
+            pill.on("mouseenter", function() {
+                hl(p, c => {
+                    if (ch.key === "L") {
+                        return c.channel === "L" || c.chIdx === 0 || (c.id && (c.id.indexOf(" (L") !== -1 || c.id.indexOf("- - L") !== -1));
+                    }
+                    if (ch.key === "R") {
+                        return c.channel === "R" || c.chIdx === 1 || (c.id && (c.id.indexOf(" (R") !== -1 || c.id.indexOf("─ R") !== -1));
+                    }
+                    return c.channel === "AVG" || (c.id && c.id.indexOf("AVG") !== -1);
+                });
+            }).on("mouseleave", function() {
+                hl(p, false);
+            });
+        });
+
+        // Imbalance badge
+        container.append("span")
+            .attr("class", "imbalance-badge")
+            .attr("title", "Channel imbalance detected")
+            .text("⚠️")
+            .style("display", hasImbalance(p) ? "inline-flex" : "none");
+
+        renderPillsState(p, td);
+    });
+}
+
+function renderPillsState(p, td) {
+    if (!p || p.isTarget || !td || td.empty()) return;
+    if (!p.channelState) setCurves(p);
+    let state = p.channelState;
+
+    td.selectAll(".channel-pill").each(function() {
+        let pill = d3.select(this);
+        let chKey = pill.attr("data-channel");
+        let chState = state[chKey];
+        if (!chState) return;
+
+        pill.attr("data-visible", chState.visible ? "true" : "false");
+        pill.select(".pill-eye-icon").html(chState.visible ? EYE_OPEN_SVG : EYE_CLOSED_SVG);
+
+        let st = chState.seating || "avg";
+        let labelPrefix = (chKey === "L" ? "Left: " : chKey === "R" ? "Right: " : "L+R: ");
+        let labelSuffix = (st === "avg") ? "AVG" : (st === "all") ? "ALL" : (chKey === "L" ? ("L" + st) : chKey === "R" ? ("R" + st) : ("S" + st));
+        pill.select(".pill-label-text").text(labelPrefix + labelSuffix);
+
+        pill.select(".pill-native-select").property("value", st);
+    });
+
+    td.select(".imbalance-badge")
+        .style("display", hasImbalance(p) ? "inline-flex" : "none");
+}
+
+function updateChannelPills(p) {
+    if (!p) {
+        if (typeof table !== "undefined") {
+            table.selectAll("tr").each(function(q) {
+                renderPillsState(q, d3.select(this).select("td.channels"));
+            });
+        }
+        return;
     }
-    updateKey(s);
+    if (typeof table !== "undefined") {
+        let tr = table.selectAll("tr").filter(q => q === p);
+        renderPillsState(p, tr.select("td.channels"));
+    }
+}
+
+function addKey(s) {
+    addChannelControls(s);
 }
 
 function updateKey(s) {
-    let disp = fn => e => e.attr("display",p=>fn(p)?null:"none"),
-        cs = hasChannelSel;
-    s.select(".imbalance").call(disp(hasImbalance));
-    s.select(".keySel").call(disp(p=>cs(p)));
-    s.selectAll(".keyOnly").call(disp(pi=>cs(pi[0])));
-    s.selectAll(".keyCLabel").data(p=>p.channels).text((c,i) => i === 0 ? "- - L" : "─ R").call(disp(c=>c));
-    s.select("g").attr("mask",p=>cs(p)?"url(#chmask"+p.id+")":null);
-    let l=-17-(keyLeft?8:0);
-    s.select("path").attr("d", p =>
-        notMultichannel(p) ? "M"+(15+keyExt)+" 0H"+l :
-        ["M15 -6H9C0 -6,0 0,-9 0H"+l,"M"+l+" 0H-9C0 0,0 6,9 6H15"]
-            .filter((_,i) => p.channels[i])
-            .reduce((a,b) => a+b.slice(6))
-    );
+    updateChannelPills();
 }
 
 function addModel(t) {
@@ -492,9 +558,9 @@ function updateVariant(p) {
     let tr = table.selectAll("tr").filter(q=>q===p);
     tr.attr("data-filename", p.fileName);
     tr.select(".phonename").text(p.dispName);
-    updateKey(tr.select(".keyLine"));
-    tr.select(".seating-select")
-        .each(function(q) { updateSeatingOptions(d3.select(this), q); });
+    let chTd = tr.select("td.channels");
+    chTd.selectAll("*").remove();
+    chTd.call(addChannelControls);
     normalizePhone(p);
     updatePaths();
 }
@@ -687,7 +753,7 @@ function colorPhones() {
     updatePaths();
     let c = p=>p.active?getDivColor(p.id,true,p.hexColor):null;
     doc.select("#phones").selectAll("div.phone-item")
-        .style("background",c).style("border-color",c);
+        .style("border-color",c);
     let t = table.selectAll("tr").filter(p=>!p.isTarget)
         .style("color", c);
     t.select("button").style("background-color",p=>getColor_AC({p:p}));

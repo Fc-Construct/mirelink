@@ -544,7 +544,8 @@ div.copy-url {
 }
 
 button#copy-url,
-button#download-faux {
+button#download-faux,
+button#screenshot-btn {
     position: relative;
     
     box-sizing: border-box;
@@ -569,7 +570,8 @@ button#download-faux {
 }
 
 button#copy-url:active,
-button#download-faux:active {
+button#download-faux:active,
+button#screenshot-btn:active {
     box-sizing: border-box;
     background-color: var(--accent-color) !important;
     border-color: var(--accent-color) !important;
@@ -577,7 +579,8 @@ button#download-faux:active {
     color: var(--font-color-secondary);
 }
 
-button#copy-url:before {
+button#copy-url:before,
+button#screenshot-btn:before {
     position: absolute;
     top: 0;
     left: 0;
@@ -599,12 +602,14 @@ button#copy-url:before {
     transition: opacity 0.2s ease-out;
 }
 
-button#copy-url.clicked:before {
+button#copy-url.clicked:before,
+button#screenshot-btn.clicked:before {
     opacity: 1.0;
     transition: opacity 0.0s linear;
 }
 
-button#download-faux {
+button#download-faux,
+button#screenshot-btn {
     margin-left: 6px;
 }
 
@@ -1697,49 +1702,251 @@ tbody.curves > tr > td.item-line div.variants path {
     display: none;
 }
 
-/* L+R line w/ svg */
+.curves-g path.highlight {
+    stroke-opacity: 1 !important;
+}
+
+/* Channel pills segmented group */
 tbody.curves > tr > td.channels {
     order: 2;
-    
-    flex: 100px 0 0;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 4px;
 }
 
-tbody.curves > tr > td.channels svg.keyLine {
-    height: 100px;
-    width: auto;
-    max-height: 40px;
+.channel-pills-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
-tbody.curves > tr > td.channels text {
-    fill: var(--background-color-contrast-more) !important;
-    color: var(--background-color-contrast-more) !important;
+.channel-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    box-sizing: border-box;
+    background-color: var(--background-color-inputs);
+    border: 1px solid var(--background-color-contrast-more);
+    border-radius: 6px;
+    color: var(--font-color-inputs);
     font-family: var(--font-secondary);
-    font-size: 8px !important;
+    font-size: 11px;
+    line-height: 1em;
+    user-select: none;
+    transition: opacity 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.channel-pill[data-visible="false"] {
+    opacity: 0.4;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.channel-pill[data-visible="true"] {
+    opacity: 1;
+    border-color: var(--background-color-contrast-more);
+}
+
+.channel-pill[data-visible="true"]:hover {
+    border-color: var(--accent-color);
+}
+
+.channel-pill .pill-eye {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: inherit;
+    outline: none;
+}
+
+.channel-pill .pill-eye:hover {
+    color: var(--accent-color);
+}
+
+.channel-pill .pill-eye-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+}
+
+.channel-pill .pill-eye-icon svg {
+    display: block;
+    fill: currentColor;
+    opacity: 0.85;
+}
+
+.channel-pill[data-visible="false"] .pill-eye-icon svg {
+    opacity: 0.6;
+}
+
+.channel-pill .pill-divider {
+    width: 1px;
+    height: 16px;
+    background-color: var(--background-color-contrast-more);
+    opacity: 0.5;
+    flex-shrink: 0;
+}
+
+.channel-pill .pill-label {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding: 0 3px 0 8px;
+    background: none;
+    border: none;
+    margin: 0;
+    color: inherit;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 500;
     text-transform: uppercase;
+    cursor: pointer;
+    outline: none;
+    white-space: nowrap;
+}
+
+.channel-pill .pill-label:hover {
+    color: var(--accent-color);
+}
+
+.channel-pill .pill-chevron-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 100%;
+    cursor: pointer;
+    padding-right: 3px;
+}
+
+.channel-pill .pill-chevron-icon {
+    font-size: 11px;
+    opacity: 0.85;
+    pointer-events: none;
+    line-height: 1;
+}
+
+.channel-pill .pill-chevron-wrap:hover .pill-chevron-icon {
+    opacity: 1;
+    color: var(--accent-color);
+}
+
+.channel-pill .pill-native-select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    border: none;
+    background-color: var(--background-color-inputs);
+    color: var(--font-color-inputs);
+    font-family: var(--font-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.channel-pill .pill-native-select option {
+    background-color: var(--background-color-inputs);
+    color: var(--font-color-inputs);
+    font-family: var(--font-secondary);
+    font-size: 11px;
+    padding: 6px 12px;
+    text-transform: uppercase;
+}
+
+.imbalance-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: help;
+    margin-left: 2px;
+}
+
+/* Responsive adjustment for small screens */
+@media (max-width: 768px) {
+    .channel-pill {
+        height: 32px;
+        font-size: 10px;
+    }
+    .channel-pill .pill-label {
+        padding: 0 3px 0 6px;
+        font-size: 10px;
+    }
+    .channel-pill .pill-eye {
+        width: 22px;
+    }
+    .channel-pill .pill-chevron-wrap {
+        width: 18px;
+    }
 }
 
 /* Shift graph input / Levels */
 tbody.curves > tr > td.levels {
     order: 2;
-    
-    padding: 0 0 0 16px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0 0 12px;
 }
 
-tbody.curves > tr > td.levels input {
-    box-sizing: border-box;
-    width: 70px;
+.offset-pill {
+    display: inline-flex;
+    align-items: center;
     height: 36px;
-    padding: 11px 6px 11px 0;
-    
+    box-sizing: border-box;
     background-color: var(--background-color-inputs);
     border: 1px solid var(--background-color-contrast-more);
     border-radius: 6px;
+    padding: 0 6px 0 10px;
+    gap: 4px;
+    transition: border-color 0.15s ease;
+}
+
+.offset-pill:hover,
+.offset-pill:focus-within {
+    border-color: var(--accent-color);
+}
+
+.offset-pill .offset-pill-label {
+    font-family: var(--font-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--font-color-inputs);
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.offset-pill input {
+    box-sizing: border-box;
+    width: 42px;
+    height: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
     outline: none;
-    
     color: var(--font-color-inputs);
     font-family: var(--font-secondary);
     font-size: 11px;
     line-height: 1em;
+    text-transform: uppercase;
+    text-align: center;
+}
     text-transform: uppercase;
     text-align: center;
 }
@@ -1973,11 +2180,11 @@ div.scroll > div {
     padding: 11px 12px;
     overflow: hidden;
     
-    background-color: var(--background-color) !important;
+    background-color: var(--card-unselected-bg);
     border: none;
     border-radius: 6px;
     
-    color: var(--font-color-primary);
+    color: var(--card-unselected-text);
     font-weight: 400;
     font-size: 12px;
     line-height: 1.5em;
@@ -1993,7 +2200,7 @@ div.scroll > div:hover {
     text-decoration: underline;
 }
 
-div.scroll div.active {
+div.scroll#brands div.active {
     background-color: var(--accent-color) !important;
     
     color: var(--font-color-secondary);
@@ -2054,6 +2261,17 @@ div.scroll > div.phone-item {
     padding: 0;
     
     border-right: none;
+}
+
+div.scroll > div.phone-item.phone-highlighted,
+div.scroll > div.phone-item[style*="border"] {
+    background-color: var(--card-highlight-bg) !important;
+    color: var(--card-highlight-text) !important;
+}
+
+div.scroll > div.phone-item.phone-highlighted div.phone-item-add,
+div.scroll > div.phone-item[style*="border"] div.phone-item-add {
+    background-color: transparent !important;
 }
 
 div.scroll > div.phone-item span {
@@ -2169,6 +2387,7 @@ div.scroll div[style*="border"] div.phone-item-add span.remove {
     pointer-events: all;
 }
 
+div.scroll div.phone-item.phone-highlighted div.phone-item-add span.remove:before,
 div.scroll div[style*="border"] div.phone-item-add span.remove:before {
     position: absolute;
     top: 0px;
@@ -2180,8 +2399,7 @@ div.scroll div[style*="border"] div.phone-item-add span.remove:before {
     display: block;
     width: 100%;
     height: 100%;
-    background-color: var(--background-color-contrast-more);
-    background-color: var(--font-color-secondary);
+    background-color: var(--card-highlight-text) !important;
     
     mask: var(--icon-remove);
     -webkit-mask: var(--icon-remove);

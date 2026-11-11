@@ -10,6 +10,16 @@
     --background-color-graph: hsl(0, 0%, 100%);
     
     --background-color-inputs: hsl(0, 0%, 100%);
+
+    --card-unselected-bg: #ffffff;
+    --card-unselected-text: #18181b;
+    --card-highlight-bg: #eaeaea;
+    --card-highlight-text: #18181b;
+    --tree-bg-unselected: #e8e8e8;
+    --tree-bg-selected: #dadada;
+    --tree-active-pill-bg: #c4c4c7;
+    --tree-active-text: #000000;
+    --tree-inactive-text: #222222;
     
     --font-color-primary: hsl(0, 0%, 10%);
     --font-color-secondary: hsl(0, 0%, 100%);
@@ -47,6 +57,16 @@ body.theme-dark {
 
     --background-color-inputs: hsl(0, 0%, 15%);
 
+    --card-unselected-bg: #0f0f0f;
+    --card-unselected-text: #d9d9d9;
+    --card-highlight-bg: #eaeaea;
+    --card-highlight-text: #18181b;
+    --tree-bg-unselected: #1c1c1e;
+    --tree-bg-selected: #dadada;
+    --tree-active-pill-bg: #c4c4c7;
+    --tree-active-text: #000000;
+    --tree-inactive-text: #222222;
+
     --font-color-primary: hsl(0, 0%, 85%);
     --font-color-secondary: hsl(0, 0%, 0%);
     --font-color-inputs: hsl(0, 0%, 60%);
@@ -82,6 +102,16 @@ body.theme-contrast {
     --background-color-graph: hsl(0, 0%, 100%);
     
     --background-color-inputs: hsl(0, 0%, 100%);
+
+    --card-unselected-bg: #ffffff;
+    --card-unselected-text: #000000;
+    --card-highlight-bg: #eaeaea;
+    --card-highlight-text: #18181b;
+    --tree-bg-unselected: #e0e0e0;
+    --tree-bg-selected: #dadada;
+    --tree-active-pill-bg: #c4c4c7;
+    --tree-active-text: #000000;
+    --tree-inactive-text: #222222;
     
     --font-color-primary: hsl(0, 0%, 0%);
     --font-color-secondary: hsl(0, 0%, 100%);

@@ -33,6 +33,14 @@ function augmentInit() {
             animation: augmentOut ease-out 0.1s 1 forwards;
         }
 
+        article.augment:empty {
+            display: none !important;
+            border: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            max-height: 0 !important;
+        }
+
         @media (max-width: 1000px) {
             article.augment {
                 width: calc(100vw - 94px);
@@ -232,10 +240,6 @@ function augmentInit() {
 
         div.scroll div.phone-item[style*="border"][data-score="5"] span {
             padding: 11px 11px;
-        }
-
-        div.scroll div.phone-item[style*="border"] {
-            background-color: var(--font-color-primary) !important;
         }
 
         div.scroll div.phone-item[style*="border"][data-score="5"] div.phone-item-add span.remove:before {
