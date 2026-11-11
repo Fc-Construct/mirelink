@@ -25,14 +25,14 @@ jobs:
       - name: Run update_phonebook.py
         run: python3 update_phonebook.py
 
-      - name: Commit updated phone_book.json
+      - name: Commit updated phone_book.json and file_inventory.json
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/phone_book.json public/data/phone_book.json
+          git add data/phone_book.json public/data/phone_book.json data/file_inventory.json public/data/file_inventory.json
           if git diff --staged --quiet; then
-            echo "No changes to phone_book.json"
+            echo "No changes to phone_book.json or file_inventory.json"
           else
-            git commit -m "Auto-update phone_book.json [skip ci]"
+            git commit -m "Auto-update phone_book.json and file_inventory.json [skip ci]"
             git push
           fi

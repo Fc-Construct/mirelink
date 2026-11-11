@@ -84,6 +84,19 @@ This application is customized specifically for **open-canal MIRE headphone acou
 * **The `/public/` Folder**: In the Gemini AI Studio preview environment, the `/public/` directory acts as the static serving root for web assets and scripts.
 * **Automated Asset Mirroring (`autoSyncAssetsPlugin`)**: To prevent manual file duplication, a custom Vite plugin (`autoSyncAssetsPlugin` in `vite.config.ts`) automatically mirrors all files and subdirectories from `/assets/` directly into `/public/assets/` (along with `README.md`) upon dev server startup, build start, and page requests. Developers can edit or add assets exclusively in `/assets/` with instant synchronization.
 
+### 12. Unified Channel & Seating Dual-Pill Controls
+* **Three Independent Semantic Pills**: Split into **`Left`**, **`Right`**, and **`L+R`** control pills for granular multi-channel management.
+* **Dual-Action Pill Architecture**:
+  * **Text Button**: Clicking the text directly (e.g. `LEFT: AVG` $\rightarrow$ `LEFT: ALL`) cycles between average view and all seating curves.
+  * **Chevron Dropdown (`▾`)**: Opens a themed native dropdown to select specific individual seatings (`L1`, `L2`, `R1`, `Seat 1`, etc.), `AVG`, or `ALL`.
+* **Eye Visibility Toggle (`👁` / `⌣`)**: Each pill features an integrated eye toggle icon to independently show or hide that channel/variant.
+* **Non-Exclusive Channels**: Channels are not mutually exclusive; users can show `Left`, `Right`, and `L+R` averages simultaneously to visualize asymmetry and channel skews.
+* **Hover Isolation & Average Dimming**:
+  * Hovering over any individual channel pill isolates and highlights only that channel's curves on the graph (`.highlight` class).
+  * When `L+R` (AVG) is active, `Left` and `Right` curves automatically dim to 45% opacity to emphasize the primary average curve. Hovering over the `Left` or `Right` pill instantly restores their opacity on hover.
+* **Integrated Offset Control**: `OFFSET [ 0 ]` control integrated cleanly into the model control row.
+* **Legacy Layout Cleanup**: Removed legacy instruction rows and helper text (`⊕ LOCK`) for a cleaner UI. 
+
 ---
 
 ## 3. User Guide & REW Export Reminder

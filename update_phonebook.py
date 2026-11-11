@@ -205,6 +205,7 @@ def update_phonebook():
 
     if not new_prefixes:
         print("Phonebook is up to date. No new measurements to add.")
+        generate_file_inventory()
         sync_data_to_public()
         # Save to ensure mirrored public copy matches
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
@@ -289,14 +290,43 @@ def update_phonebook():
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(phonebook, f, indent=2)
 
-    # 8. Mirror to /public/data/ and write public/data/phone_book.json
+    # 8. Generate file inventory map
+    generate_file_inventory()
+
+    # 9. Mirror data to /public/data/
     sync_data_to_public()
 
-    with open(PUBLIC_OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(phonebook, f, indent=2)
+    print(f"Successfully merged updates into {OUTPUT_FILE}")
 
-    print(f"Successfully merged updates into {OUTPUT_FILE} and mirrored to {PUBLIC_OUTPUT_FILE}")
+INVENTORY_FILE = os.path.join(DATA_DIR, "file_inventory.json")
+
+def generate_file_inventory():
+    if not os.path.exists(DATA_DIR):
+        return {}
+
+    inventory = defaultdict(list)
+    for root, dirs, files in os.walk(DATA_DIR):
+        for f in sorted(files):
+            if f.endswith(".txt"):
+                stem = f[:-4].strip()
+                match = re.search(r"^(.*?)\s+([LR])\s*(\d*)$", stem, re.IGNORECASE)
+                if match:
+                    prefix = match.group(1).strip()
+                else:
+                    prefix = stem
+                rel_path = os.path.relpath(os.path.join(root, f), DATA_DIR).replace("\\", "/")
+                inventory[prefix].append(rel_path)
+
+    for prefix in inventory:
+        inventory[prefix].sort()
+
+    with open(INVENTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(inventory, f, indent=2)
+
+    print(f"Generated file inventory with {len(inventory)} prefixes in {INVENTORY_FILE}")
+    return inventory
 
 if __name__ == "__main__":
     update_phonebook()
+    generate_file_inventory()
 

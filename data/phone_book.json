@@ -161,6 +161,17 @@
           "",
           "Glasses"
         ]
+      },
+      {
+        "name": "HE1000 Unveiled",
+        "file": [
+          "HiFiMan HE1000 Unveiled",
+          "HiFiMan HE1000 Unveiled G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
       }
     ]
   },
@@ -208,6 +219,17 @@
         "file": [
           "Sennheiser HE1",
           "Sennheiser HE1 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "HD 600",
+        "file": [
+          "Sennheiser HD 600",
+          "Sennheiser HD 600 G"
         ],
         "suffix": [
           "",
@@ -299,6 +321,53 @@
         "suffix": [
           "",
           "Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "FiiO",
+    "phones": [
+      {
+        "name": "FT15",
+        "file": [
+          "FiiO FT15",
+          "FiiO FT15 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "FT15 Leather",
+        "file": [
+          "FiiO FT15 Leather",
+          "FiiO FT15 Leather G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Hongshu",
+    "phones": [
+      {
+        "name": "EH-1",
+        "file": [
+          "Hongshu EH-1",
+          "Hongshu EH-1 G",
+          "Hongshu EH-1 Bass",
+          "Hongshu EH-1 Bass G"
+        ],
+        "suffix": [
+          "Stock",
+          "Stock Glasses",
+          "Bass",
+          "Bass Glasses"
         ]
       }
     ]

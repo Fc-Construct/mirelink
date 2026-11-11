@@ -1344,6 +1344,8 @@ function renderTargetsUI() {
 // Global in-memory text & parsed data cache for 0ms re-fetches
 const rawFileCache = new Map();
 const parsedResultCache = new Map();
+const inFlightLoads = new Map();
+const fileInventoryMap = new Map();
 
 function fetchTextCached(path) {
     if (rawFileCache.has(path)) {
@@ -1358,43 +1360,74 @@ function fetchTextCached(path) {
     });
 }
 
+// Helper to stem channel symbol and seating number from filename stem
+function matchChannelSeating(relPath, channelSymbol) {
+    let fname = relPath.split("/").pop();
+    let stem = fname.endsWith(".txt") ? fname.slice(0, -4).strip ? fname.slice(0, -4).strip() : fname.slice(0, -4).trim() : fname;
+    let re = new RegExp("\\s+" + channelSymbol + "\\s*(\\d*)$", "i");
+    let match = stem.match(re);
+    if (match) {
+        let seatingNum = match[1] ? parseInt(match[1], 10) : 1;
+        let label = channelSymbol + (match[1] ? match[1] : "");
+        return { seatingNum: seatingNum, label: label };
+    }
+    return null;
+}
 
-// Quiet background prefetching during browser idle time
+// Quiet background prefetching of ALL models and variants during browser idle time
 function startBackgroundPrefetching() {
     if (!window.allPhones || !window.allPhones.length) return;
-    let index = 0;
 
-    function prefetchNextChunk(deadline) {
-        while ((!deadline || deadline.timeRemaining() > 5) && index < window.allPhones.length) {
-            let p = window.allPhones[index++];
-            if (p && !p.rawChannels && !p.isLoading) {
-                p.isLoading = true;
-                loadFiles(p, function (ch) {
-                    p.isLoading = false;
-                    if (ch) p.rawChannels = ch;
+    // Collect all unique variant prefixes across all phone entries
+    let targetsToFetch = [];
+    window.allPhones.forEach(p => {
+        let fList = p.fileNames || [p.fileName];
+        if (!Array.isArray(fList)) fList = [fList];
+        fList.forEach(fn => {
+            if (fn && !targetsToFetch.some(item => item.fileName === fn)) {
+                targetsToFetch.push({
+                    fileName: fn,
+                    dispName: p.dispName,
+                    isTarget: false
                 });
             }
+        });
+    });
+
+    let index = 0;
+
+    function fetchNext() {
+        if (index >= targetsToFetch.length) return;
+
+        let p = targetsToFetch[index++];
+        if (!p || parsedResultCache.has(p.fileName) || inFlightLoads.has(p.fileName)) {
+            scheduleNext();
+            return;
         }
-        if (index < window.allPhones.length) {
-            if ('requestIdleCallback' in window) {
-                requestIdleCallback(prefetchNextChunk, { timeout: 2000 });
-            } else {
-                setTimeout(prefetchNextChunk, 200);
-            }
+
+        loadFiles(p).then(() => {
+            scheduleNext();
+        }).catch(() => {
+            scheduleNext();
+        });
+    }
+
+    function scheduleNext() {
+        if (index >= targetsToFetch.length) return;
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => fetchNext(), { timeout: 3000 });
+        } else {
+            setTimeout(fetchNext, 80);
         }
     }
 
-    // Delay start by 2 seconds after page load so initial visible headphones render with top priority
-    setTimeout(() => {
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(prefetchNextChunk, { timeout: 2000 });
-        } else {
-            setTimeout(prefetchNextChunk, 200);
-        }
-    }, 2000);
+    // Delay initial prefetch start by 2 seconds after page load
+    setTimeout(scheduleNext, 2000);
 }
 
 function loadFiles(p, callback) {
+    if (!callback) callback = () => {};
+
     let parseValid = function (txt) {
         if (!txt || typeof txt !== "string" || txt.trim().startsWith("<")) return null;
         let data = tsvParse(txt);
@@ -1409,18 +1442,17 @@ function loadFiles(p, callback) {
         return null;
     };
 
-    let getParsedFile = f => fetchTextCached(f + ".txt").then(parseValid);
+    let getParsedFile = f => fetchTextCached(f.endsWith(".txt") ? f : f + ".txt").then(parseValid);
 
     // Target loading
     if (p.isTarget) {
         if (parsedResultCache.has(p.fileName)) {
             let cachedTarget = parsedResultCache.get(p.fileName);
             callback(cachedTarget);
-            return;
+            return Promise.resolve(cachedTarget);
         }
-        getParsedFile(DIR + "targets/" + p.fileName).then(function (data) {
+        let targetPromise = getParsedFile(DIR + "targets/" + p.fileName).then(function (data) {
             if (!data) {
-                // Fallback attempt without targets/ prefix
                 return getParsedFile(DIR + p.fileName);
             }
             return data;
@@ -1428,13 +1460,15 @@ function loadFiles(p, callback) {
             if (!data) {
                 console.warn("Target file not found: " + p.dispName);
                 callback(null);
+                return null;
             } else {
                 let ch = [Equalizer.interp(f_values, data)];
                 parsedResultCache.set(p.fileName, ch);
                 callback(ch);
+                return ch;
             }
         });
-        return;
+        return targetPromise;
     }
 
     // Check if result is already in memory cache
@@ -1443,95 +1477,196 @@ function loadFiles(p, callback) {
         p.sampleLabels = cached.sampleLabels;
         p.nonStandardSmoothing = cached.nonStandardSmoothing;
         callback(cached.channels);
-        return;
+        return Promise.resolve(cached.channels);
     }
 
-    // Smart Probe: Probe unnumbered and seatings 1..10 efficiently (supporting L1 and L 1)
-    const maxSeatings = 10;
-    let probes = [];
-    LR.forEach(s => {
-        probes.push(getParsedFile(DIR + p.fileName + " " + s));
-        for (let i = 1; i <= maxSeatings; i++) {
-            probes.push(
-                getParsedFile(DIR + p.fileName + " " + s + i).then(function (data) {
-                    if (data !== null) return data;
-                    return getParsedFile(DIR + p.fileName + " " + s + " " + i);
-                })
-            );
-        }
-    });
-
-    Promise.all(probes).then(function (frs) {
-        let stride = 1 + maxSeatings;
-        let perChannel = [];
-        let total = 0;
-        LR.forEach((s, idx) => {
-            let offset = idx * stride;
-            let unnum = frs[offset];
-            let numbered = [];
-            for (let i = 1; i <= maxSeatings; i++) {
-                let data = frs[offset + i];
-                if (data !== null) {
-                    numbered.push({ label: s + i, data: data });
+    // Deduplicate in-flight requests for the same prefix
+    if (inFlightLoads.has(p.fileName)) {
+        let loadPromise = inFlightLoads.get(p.fileName);
+        loadPromise.then(channels => {
+            if (channels) {
+                let cached = parsedResultCache.get(p.fileName);
+                if (cached) {
+                    p.sampleLabels = cached.sampleLabels;
+                    p.nonStandardSmoothing = cached.nonStandardSmoothing;
                 }
             }
-            if (numbered.length > 0) {
-                perChannel.push(numbered);
-                total += numbered.length;
-            } else if (unnum !== null) {
-                perChannel.push([{ label: s, data: unnum }]);
-                total += 1;
-            } else {
-                perChannel.push([]);
-            }
+            callback(channels);
         });
+        return loadPromise;
+    }
 
-        if (!total) {
-            console.warn("Headphone file not found: " + p.dispName);
-            callback(null);
-            return;
-        }
+    let loadPromise = new Promise((resolve) => {
+        let knownFiles = fileInventoryMap.get(p.fileName);
 
-        let maxCount = Math.max(...perChannel.map(c => c.length));
-        let channels = [];
-        let labels = [];
-        perChannel.forEach((samples, idx) => {
-            let s = LR[idx];
-            for (let i = 0; i < maxCount; i++) {
-                if (i < samples.length) {
-                    channels.push(Equalizer.interp(f_values, samples[i].data));
-                    labels.push(samples[i].label);
-                } else if (samples.length > 0) {
-                    channels.push(null);
-                    labels.push(s + (i + 1));
-                } else {
-                    channels.push(null);
-                    labels.push(s);
+        if (knownFiles && knownFiles.length > 0) {
+            // Direct Inventory Fetch: ZERO 404 Probing!
+            let filePromises = knownFiles.map(relPath => {
+                return fetchTextCached(DIR + relPath).then(parseValid).then(data => ({
+                    relPath: relPath,
+                    data: data
+                }));
+            });
+
+            Promise.all(filePromises).then(results => {
+                let validResults = results.filter(r => r.data !== null);
+                if (validResults.length === 0) {
+                    callback(null);
+                    resolve(null);
+                    return;
                 }
-            }
-        });
 
-        p.sampleLabels = labels;
+                let perChannel = [];
+                LR.forEach((s, chIdx) => {
+                    let chSamples = [];
+                    validResults.forEach(r => {
+                        let match = matchChannelSeating(r.relPath, s);
+                        if (match) {
+                            chSamples.push({
+                                label: match.label,
+                                seatingNum: match.seatingNum,
+                                data: r.data
+                            });
+                        }
+                    });
+                    chSamples.sort((a, b) => a.seatingNum - b.seatingNum);
+                    perChannel.push(chSamples);
+                });
 
-        let nonStandardSmooth = [];
-        perChannel.forEach(samples => {
-            samples.forEach(s => {
-                if (s.data && s.data.smoothingInfo && !s.data.isStandard16) {
-                    nonStandardSmooth.push(s.data.smoothingInfo);
+                let maxCount = Math.max(...perChannel.map(c => c.length), 1);
+                let channels = [];
+                let labels = [];
+
+                perChannel.forEach((samples, chIdx) => {
+                    let s = LR[chIdx];
+                    for (let i = 0; i < maxCount; i++) {
+                        if (i < samples.length) {
+                            channels.push(Equalizer.interp(f_values, samples[i].data));
+                            labels.push(samples[i].label);
+                        } else if (samples.length > 0) {
+                            channels.push(null);
+                            labels.push(s + (i + 1));
+                        } else {
+                            channels.push(null);
+                            labels.push(s);
+                        }
+                    }
+                });
+
+                p.sampleLabels = labels;
+
+                let nonStandardSmooth = [];
+                validResults.forEach(r => {
+                    if (r.data && r.data.smoothingInfo && !r.data.isStandard16) {
+                        nonStandardSmooth.push(r.data.smoothingInfo);
+                    }
+                });
+                p.nonStandardSmoothing = nonStandardSmooth.length ? nonStandardSmooth[0] : null;
+
+                parsedResultCache.set(p.fileName, {
+                    channels: channels,
+                    sampleLabels: labels,
+                    nonStandardSmoothing: p.nonStandardSmoothing
+                });
+
+                callback(channels);
+                resolve(channels);
+            });
+        } else {
+            // Fallback probe if inventory map is not present
+            const maxSeatings = 10;
+            let probes = [];
+            LR.forEach(s => {
+                probes.push(getParsedFile(DIR + p.fileName + " " + s));
+                for (let i = 1; i <= maxSeatings; i++) {
+                    probes.push(
+                        getParsedFile(DIR + p.fileName + " " + s + i).then(function (data) {
+                            if (data !== null) return data;
+                            return getParsedFile(DIR + p.fileName + " " + s + " " + i);
+                        })
+                    );
                 }
             });
-        });
-        p.nonStandardSmoothing = nonStandardSmooth.length ? nonStandardSmooth[0] : null;
 
-        // Store in memory cache
-        parsedResultCache.set(p.fileName, {
-            channels: channels,
-            sampleLabels: labels,
-            nonStandardSmoothing: p.nonStandardSmoothing
-        });
+            Promise.all(probes).then(function (frs) {
+                let stride = 1 + maxSeatings;
+                let perChannel = [];
+                let total = 0;
+                LR.forEach((s, idx) => {
+                    let offset = idx * stride;
+                    let unnum = frs[offset];
+                    let numbered = [];
+                    for (let i = 1; i <= maxSeatings; i++) {
+                        let data = frs[offset + i];
+                        if (data !== null) {
+                            numbered.push({ label: s + i, data: data });
+                        }
+                    }
+                    if (numbered.length > 0) {
+                        perChannel.push(numbered);
+                        total += numbered.length;
+                    } else if (unnum !== null) {
+                        perChannel.push([{ label: s, data: unnum }]);
+                        total += 1;
+                    } else {
+                        perChannel.push([]);
+                    }
+                });
 
-        callback(channels);
+                if (!total) {
+                    console.warn("Headphone file not found: " + p.dispName);
+                    callback(null);
+                    resolve(null);
+                    return;
+                }
+
+                let maxCount = Math.max(...perChannel.map(c => c.length));
+                let channels = [];
+                let labels = [];
+                perChannel.forEach((samples, idx) => {
+                    let s = LR[idx];
+                    for (let i = 0; i < maxCount; i++) {
+                        if (i < samples.length) {
+                            channels.push(Equalizer.interp(f_values, samples[i].data));
+                            labels.push(samples[i].label);
+                        } else if (samples.length > 0) {
+                            channels.push(null);
+                            labels.push(s + (i + 1));
+                        } else {
+                            channels.push(null);
+                            labels.push(s);
+                        }
+                    }
+                });
+
+                p.sampleLabels = labels;
+
+                let nonStandardSmooth = [];
+                perChannel.forEach(samples => {
+                    samples.forEach(s => {
+                        if (s.data && s.data.smoothingInfo && !s.data.isStandard16) {
+                            nonStandardSmooth.push(s.data.smoothingInfo);
+                        }
+                    });
+                });
+                p.nonStandardSmoothing = nonStandardSmooth.length ? nonStandardSmooth[0] : null;
+
+                parsedResultCache.set(p.fileName, {
+                    channels: channels,
+                    sampleLabels: labels,
+                    nonStandardSmoothing: p.nonStandardSmoothing
+                });
+
+                callback(channels);
+                resolve(channels);
+            });
+        }
+    }).finally(() => {
+        inFlightLoads.delete(p.fileName);
     });
+
+    inFlightLoads.set(p.fileName, loadPromise);
+    return loadPromise;
 }
 let validChannels = p => p.channels.filter(c=>c!==null);
 let numChannels = p => d3.sum(p.channels, c=>c!==null);
@@ -2018,7 +2153,20 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
     let keep = !exclusive ? (q=>true)
              : (q => q===p || q.copyOf===p || q.pin || q.isTarget!==p.isTarget || q.isPrefBounds);
     if (!p.rawChannels) {
-        if (p.isLoading) return;
+        if (p.isLoading) {
+            if (inFlightLoads.has(p.fileName)) {
+                inFlightLoads.get(p.fileName).then(ch => {
+                    p.isLoading = false;
+                    if (!ch) return;
+                    p.rawChannels = ch;
+                    if (p.vars) p.vars[p.fileName] = ch;
+                    showPhone(p, exclusive, suppressVariant, trigger);
+                    if (trigger) { scrollToActive(); }
+                    if (analyticsEnabled) { pushPhoneTag(phone_displayed, p, trigger); }
+                });
+            }
+            return;
+        }
         p.isLoading = true;
         loadFiles(p, function (ch) {
             p.isLoading = false;
@@ -2273,8 +2421,13 @@ function asPhoneObj(b, p, isInit, inits) {
     return r;
 }
 
-d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
-            : DIR+"phone_book.json?"+ new Date().getTime()).then(function (brands) {
+Promise.all([
+    d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK : DIR+"phone_book.json?"+ new Date().getTime()),
+    d3.json(typeof FILE_INVENTORY !== "undefined" ? FILE_INVENTORY : DIR+"file_inventory.json?"+ new Date().getTime()).catch(() => null)
+]).then(function ([brands, invData]) {
+    if (invData && typeof invData === "object") {
+        Object.keys(invData).forEach(k => fileInventoryMap.set(k, invData[k]));
+    }
     let brandMap = window.brandMap = {},
         inits = [],
         initReq = typeof init_phones !== "undefined" ? [init_phones].flat() : false;

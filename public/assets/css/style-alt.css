@@ -1613,23 +1613,16 @@ tbody.curves > tr > td.item-line span.variantPopout:nth-of-type(20) {
 
 /* Styles for variantName + variantPopout layout */
 div.variant-names {
-    flex: auto 1 1;
-    max-width: calc(100% - 40px);
+    flex: 1 1 100%;
+    max-width: 100%;
 }
 
 div.variant-popouts {
-    flex: 36px 0 0;
-    padding: 7px 0 0 0;
-    padding: 0;
+    display: none !important;
 }
 
 span.variantPopout {
-    margin: 0 0 14px 0;
-    display: flex !important;
-}
-
-span.variantPopout[style*="display: none;"] {
-    opacity: 0.0;
+    display: none !important;
 }
 
 /* -- */
