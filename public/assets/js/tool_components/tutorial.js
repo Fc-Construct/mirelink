@@ -4,6 +4,7 @@
 function addTutorial() {
     let partsPrimary = document.querySelector("section.parts-primary"),
         graphContainer = document.querySelector("div.graph-sizer"),
+        svgWrap = document.querySelector("div.graph-svg-wrap") || graphContainer,
         manageContainer = document.querySelector("div.manage"),
         overlayContainer = document.createElement("div"),
         buttonContainer = document.createElement("div"),
@@ -11,13 +12,13 @@ function addTutorial() {
         zoomButtons = document.querySelectorAll("div.zoom button");
 
     overlayContainer.className = "tutorial-overlay";
-    graphContainer.prepend(overlayContainer);
+    svgWrap.prepend(overlayContainer);
 
     buttonContainer.className = "tutorial-buttons";
     descriptionContainer.className = "tutorial-description";
 
+    graphContainer.prepend(buttonContainer);
     manageContainer.prepend(descriptionContainer);
-    manageContainer.prepend(buttonContainer);
 
     tutorialDefinitions.forEach(function(def) {
         let defOverlay = document.createElement("div"),
@@ -34,6 +35,8 @@ function addTutorial() {
         defButton.setAttribute("tutorial-def", def.name);
         defButton.setAttribute("tutorial-on", "false");
         defButton.className = "button-segment";
+        defButton.style.flex = "0 0 " + def.width;
+        defButton.style.width = def.width;
         defButton.textContent = def.name;
         buttonContainer.append(defButton);
 

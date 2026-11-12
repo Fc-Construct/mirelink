@@ -18,8 +18,8 @@ function initCalcBrush() {
     stopCalc();
     let tools = typeof getToolsLayer === 'function' ? getToolsLayer() : gr;
     
-    // Grid plot area top is pad.t + 10 (20px), bottom is pad.t + H (310px)
-    let gridTopOffset = 10;
+    // Grid plot area top is pad.t, bottom is pad.t + H
+    let gridTopOffset = 0;
     let gridHeight = H - gridTopOffset;
 
     calcBrush = d3.brushX()
@@ -145,6 +145,9 @@ function initCalculateComponent() {
         let btn = d3.select(this);
         interactCalc = !interactCalc;
         btn.classed("selected", interactCalc);
+        if (typeof window.syncGraphToolOverlayState === "function") {
+            window.syncGraphToolOverlayState();
+        }
         if (interactCalc) {
             initCalcBrush();
         } else {

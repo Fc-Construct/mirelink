@@ -757,46 +757,39 @@ tbody.curves > tr > td.comp select {
   }
 }
 
+/* Legacy 500px flex-order overrides - neutralized for new mobile accordion card layout */
+/*
 @media ( max-width: 500px) {
   tbody.curves > tr:before {
     order: 5;
-    
     content:'';
     display: block;
     flex: 100% 1 1;
-    
     height: 0px;
   }
-  
   tbody.curves > tr > td.channels {
     order: 3;
   }
-  
   tbody.curves > tr > td.levels {
     order: 4;
-
-      margin-right: 0px !important;
+    margin-right: 0px !important;
   } 
-
   tbody.curves > tr > td.comp {
     order: 4 !important;
-      
     margin-right: 16px;
   }
-  
   tbody.curves > tr > td.button-baseline {
     margin-left: auto;
   }
-  
   tbody.curves > tr > td.button-baseline,
   tbody.curves > tr > td.hideIcon,
   tbody.curves > tr > td.button-pin {
     order: 5;
   }   
 }
-
+*/
 tbody.curves > tr > td.remove {
-  order: 7 !important;
+  order: 6;
 }
 
 :root {

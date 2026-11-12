@@ -19,7 +19,7 @@ const init_phones = ["10 dB downwards tilt Target", "Sennheiser HE1"], // Graphs
       alt_augment = true,                           // Display augment card in phone list
       site_url = './',                              // Base URL
       share_url = true,                             // Enable shareable URLs
-      watermark_text = "Fc-Construct's MIRE SquigLink", // Watermark text behind graphs
+      watermark_text = "Fc-Construct's MIRElink",          // Watermark text behind graphs
       watermark_image_url = "",                     // Watermark logo (optional)
       rig_description = "Open-Canal MIRE (In-Ear Mic)", // Rig description
       page_title = "Fc-Construct's MIRE Squiglink", // Appended to page title
@@ -89,12 +89,6 @@ function watermark(svg) {
             .attrs({id: 'wtext', x: 0, y: 75, "font-size": 24, "text-anchor": "middle", "class": "graph-name"})
             .text(watermark_text);
     }
-
-    if (rig_description) {
-        wm.append("text")
-            .attrs({x: 380, y: -134, "font-size": 9, "text-anchor": "end", "class": "rig-description", "style": "filter: var(--svg-filter);"})
-            .text("Measured on: " + rig_description);
-    }
 }
 
 // Parse FR text data from REW or AudioTool format
@@ -127,7 +121,7 @@ setLayout();
 
 // Footer accessories
 const simpleAbout = `
-    <p class="center">Fc-Construct's MIRE Squiglink — Open-canal in-ear microphone measurements compensated against personal measured HRTF baseline.</p>
+    <p class="center">MIRElink by Fc-Construct. Headphone measurements taken using open-canal in-ear microphones compensated against Fc-Construct's personal DF-HRTF.</p>
 `;
 const whichAccessoriesToUse = simpleAbout;
 

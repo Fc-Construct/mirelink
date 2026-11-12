@@ -1,6 +1,6 @@
 {
-  "name": "Fc-Construct's MIRE Squiglink",
-  "description": "Fc-Construct's headphone database taken with open canal in-ear microphones",
+  "name": "Fc-Construct MIRElink",
+  "description": "Fc-Construct's headphone database taken with open canal in-ear microphones, modified heavily from Squiglink",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -50,6 +50,9 @@ function toggleHide(p) {
         clearLabels();
         drawLabels();
     }
+    if (typeof window.syncGraphHeader === "function") {
+        window.syncGraphHeader();
+    }
 }
 
 
@@ -100,23 +103,40 @@ function updateSeatingOptions(selectElem, p) {
 
 // --- Main table builder + channel/comp wiring ---
 function updatePhoneTable() {
-    let c = table.selectAll("tr").data(activePhones.filter(p => !p.isPrefBounds), p=>p.fileName);
+    let phoneList = activePhones.filter(p => !p.isPrefBounds);
+    phoneList.sort((a, b) => {
+        if (a.isTarget && !b.isTarget) return -1;
+        if (!a.isTarget && b.isTarget) return 1;
+        return 0;
+    });
+    let c = table.selectAll("tr").data(phoneList, p=>p.fileName);
     c.exit().remove();
 
-    let f = c.enter().append("tr").attr("data-filename", p=>p.fileName),
+    let f = c.enter().append("tr")
+        .attr("data-filename", p=>p.fileName)
+        .attr("class", p => p.isTarget ? "tr-target" : "tr-headphone card-expanded"),
         td = () => f.append("td");
     f.style("color", p => getDivColor(p.id,true,p.hexColor));
 
-    td().attr("class","remove").text("⊗")
-        .attr("title", "Remove graph")
-        .on("click", removePhone)
-        .style("background-image",colorBar)
-        .append("svg").call(addColorPicker); // .filter(p=>!p.isTarget) if you want to exclude target from color picker
-    td().attr("class","item-line item-target")
+    // When a new headphone enters on mobile, expand it and auto-collapse previous headphones
+    if (f.filter(p => !p.isTarget).size() > 0) {
+        c.filter(p => !p.isTarget).classed("card-expanded", false).classed("card-collapsed", true);
+        f.filter(p => !p.isTarget).classed("card-expanded", true).classed("card-collapsed", false);
+    }
+
+    // Action buttons [Eye] [Pin] [X] are unified in td.row-actions at the end of the row
+    
+    let itemLine = td().attr("class","item-line item-target")
         .call(s=>s.filter(p=>!p.isTarget).attr("class","item-line item-phone")
                   .append("span").attr("class","brand").text(p=>p.dispBrand))
-        .call(addModel)
-        .filter(p => !p.isTarget)
+        .call(addModel);
+
+    itemLine.filter(p => !p.isTarget)
+        .append("span")
+        .attr("class", "card-chevron")
+        .html("▾");
+
+    itemLine.filter(p => !p.isTarget)
         .append("span")
         .attr("class", "smoothing-warn")
         .style("margin-left", "6px")
@@ -125,6 +145,28 @@ function updatePhoneTable() {
         .style("display", p => p.nonStandardSmoothing ? "inline-block" : "none")
         .html("⚠️")
         .attr("title", p => "Warning: Measurement smoothing is non-standard (" + (p.nonStandardSmoothing || "Unknown") + "). Standard MIRE measurements use 1/6 octave acoustic smoothing.");
+
+    // Click header to toggle accordion on mobile
+    itemLine.filter(p => !p.isTarget).on("click", function() {
+        if (window.innerWidth > 1000) return;
+        if (d3.event && d3.event.target && (
+            d3.event.target.closest(".variants") ||
+            d3.event.target.closest(".variantName") ||
+            d3.event.target.closest(".variantPopout") ||
+            d3.event.target.closest(".smoothing-warn")
+        )) {
+            return;
+        }
+        let tr = d3.select(this.parentNode);
+        let wasExpanded = tr.classed("card-expanded");
+        table.selectAll("tr.tr-headphone")
+            .classed("card-expanded", false)
+            .classed("card-collapsed", true);
+        if (!wasExpanded) {
+            tr.classed("card-expanded", true).classed("card-collapsed", false);
+        }
+    });
+
     td().attr("class","curve-color").append("button")
         .style("background-color",p=>getColor_AC({p:p}))
         .call(makeColorPicker); // .filter(p=>!p.isTarget) if you want to exclude target from color picker
@@ -138,15 +180,7 @@ function updatePhoneTable() {
         updateCurves(p, undefined, p.lr, val === "all", val);
         hl(p, true);
     });
-    let levTd = td().attr("class","levels");
-    let offsetPill = levTd.append("div").attr("class", "offset-pill");
-    offsetPill.append("span").attr("class", "offset-pill-label").text("OFFSET");
-    offsetPill.append("input")
-        .attrs({type:"number",step:"any",value:0})
-        .property("value", p=>p.offset)
-        .attr("placeholder", "0")
-        .attr("title", "Offset: Add or subtract dB on the graph")
-        .on("change input",function(p){ setOffset(p, +this.value); });
+    /* --- Disabled for MIRE layout: comp dropdown, baseline, and 90% buttons (can be re-enabled if needed) ---
     let cSel = f.filter(p=>!p.isTarget).append("td").attr("class", "comp").append("select");
     cSel.selectAll("option").data(["<no comp>", ...compTargets])
         .enter().append("option").text(d=>d);
@@ -184,7 +218,6 @@ function updatePhoneTable() {
                     let ch = calculateInclusionWindows(rawChannels);
                     let ninetyPercentInclusion = setBoundsPhone(p, ch);
                     showPhone(ninetyPercentInclusion);
-                    console.log(rawChannels)
                 });
             } else {
                 let ch = calculateInclusionWindows(p.rawChannels);
@@ -199,32 +232,30 @@ function updatePhoneTable() {
     f.filter(p=>!p.isTarget && !p.is90Bounds).append("td").attr("class","button button-ninety")
         .html("<svg width='100' height='100' viewBox='0 0 100 100' stroke-width='1.5'><use xlink:href='#ninety-icon'></use></svg>")
         .on("click", showNinetyInclusion);
+    --- End disabled MIRE controls --- */
 
-    td().attr("class","button hideIcon")
+    let actionsTd = td().attr("class", "row-actions");
+    actionsTd.append("span").attr("class", p => "button hideIcon" + (p && p.hide ? "" : " selected"))
         .attr("title", "Hide graph")
         .html("<svg viewBox='-2.5 0 19 12'><use xlink:href='#hide-icon'></use></svg>")
         .on("click", toggleHide);
-    td().attr("class","button button-pin")
+    actionsTd.append("span").attr("class", p => "button button-pin" + (p && p.pin ? " selected" : ""))
         .attr("title", "Pin graph")
-        .attr("data-pinned","false")
+        .attr("data-pinned", p => p && p.pin ? "true" : "false")
         .html("<svg viewBox='-135 -100 270 200'><use xlink:href='#pin-icon'></use></svg>")
         .on("click",function(p){
-            // Pin is one-way: replace the button with a permanent pin mark.
-            p.pin = true;
+            // Toggle pin state
+            p.pin = !p.pin;
             nextPN = null;
-            this.setAttribute("data-pinned","true");
-            d3.select(this)
-                .text(null).classed("button",false).on("click",null)
-                .insert("svg").attr("class","pinMark")
-                .attr("viewBox","0 0 280 145")
-                .insert("path").attrs({
-                    fill:"none",
-                    "stroke-width":30,
-                    "stroke-linecap":"round",
-                    d:"M265 110V25q0 -10 -10 -10H105q-24 0 -48 20l-24 20q-24 20 -2 40l18 15q24 20 42 20h100"
-                });
+            this.setAttribute("data-pinned", p.pin ? "true" : "false");
+            d3.select(this).classed("selected", p.pin);
             if (!userConfigApplicationActive) setUserConfig();
         });
+    actionsTd.append("span").attr("class","remove").text("")
+        .attr("title", "Remove graph")
+        .on("click", removePhone)
+        .style("background-image",colorBar)
+        .append("svg").call(addColorPicker); // .filter(p=>!p.isTarget) if you want to exclude target from color picker
     if (allowSquigDownload) {
         function saveSquiggle(p) {
             let channels = p.activeCurves.map(c => c.l);
@@ -328,14 +359,28 @@ const EYE_CLOSED_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="no
 function addChannelControls(tdSelection) {
     tdSelection.each(function(p) {
         let td = d3.select(this);
-        if (p.isTarget) return;
-
         let container = td.append("div").attr("class", "channel-pills-group");
+
+        if (p.isTarget) {
+            let targetOffsetPill = container.append("div")
+                .attr("class", "offset-pill")
+                .attr("title", "Offset: Add or subtract dB on the graph");
+            targetOffsetPill.append("span").attr("class", "offset-pill-label").text("OFFSET");
+            targetOffsetPill.append("input")
+                .attrs({type:"number", step:"any", value: 0})
+                .property("value", p.offset || 0)
+                .attr("placeholder", "0")
+                .attr("title", "Offset: Add or subtract dB on the graph")
+                .on("change input", function() {
+                    setOffset(p, +this.value);
+                });
+            return;
+        }
 
         const CHANNELS = [
             { key: "L", label: "Left" },
             { key: "R", label: "Right" },
-            { key: "LR", label: "L+R" }
+            { key: "LR", label: "L + R" }
         ];
 
         CHANNELS.forEach(ch => {
@@ -431,6 +476,20 @@ function addChannelControls(tdSelection) {
             .text("⚠️")
             .style("display", hasImbalance(p) ? "inline-flex" : "none");
 
+        // Headphone offset pill (Option A: sits next to L+R pill inside channel-pills-group)
+        let offsetPill = container.append("div")
+            .attr("class", "offset-pill")
+            .attr("title", "Offset: Add or subtract dB on the graph");
+        offsetPill.append("span").attr("class", "offset-pill-label").text("OFFSET");
+        offsetPill.append("input")
+            .attrs({type:"number", step:"any", value: 0})
+            .property("value", p.offset || 0)
+            .attr("placeholder", "0")
+            .attr("title", "Offset: Add or subtract dB on the graph")
+            .on("change input", function() {
+                setOffset(p, +this.value);
+            });
+
         renderPillsState(p, td);
     });
 }
@@ -439,6 +498,8 @@ function renderPillsState(p, td) {
     if (!p || p.isTarget || !td || td.empty()) return;
     if (!p.channelState) setCurves(p);
     let state = p.channelState;
+
+    td.select(".offset-pill input").property("value", p.offset || 0);
 
     td.selectAll(".channel-pill").each(function() {
         let pill = d3.select(this);
@@ -450,7 +511,7 @@ function renderPillsState(p, td) {
         pill.select(".pill-eye-icon").html(chState.visible ? EYE_OPEN_SVG : EYE_CLOSED_SVG);
 
         let st = chState.seating || "avg";
-        let labelPrefix = (chKey === "L" ? "Left: " : chKey === "R" ? "Right: " : "L+R: ");
+        let labelPrefix = (chKey === "L" ? "Left: " : chKey === "R" ? "Right: " : "L + R: ");
         let labelSuffix = (st === "avg") ? "AVG" : (st === "all") ? "ALL" : (chKey === "L" ? ("L" + st) : chKey === "R" ? ("R" + st) : ("S" + st));
         pill.select(".pill-label-text").text(labelPrefix + labelSuffix);
 
@@ -484,6 +545,18 @@ function updateKey(s) {
     updateChannelPills();
 }
 
+function closeAllVariantPopovers() {
+    d3.selectAll(".variant-names, .variant-popouts").remove();
+    d3.selectAll(".variants").classed("popover-open", false);
+}
+
+d3.select(document).on("click.variantPopover", function() {
+    if (d3.event && d3.event.target && d3.event.target.closest(".variants, .variant-names")) {
+        return;
+    }
+    closeAllVariantPopovers();
+});
+
 function addModel(t) {
     let n = t.append("div").attr("class","phonename").text(p=>p.dispName);
     t.filter(p=>p.fileNames)
@@ -493,19 +566,19 @@ function addModel(t) {
                 .append("path").attr("fill","currentColor")
                 .attr("d","M1 2L5 6L9 2L8 1L6 3Q5 4 4 3L2 1Z");
         })
-        .attr("tabindex",0) // Make focusable
-        .on("focus", function (p) {
-            if (p.selectInProgress) return;
-            p.selectInProgress = true;
+        .on("click", function (p) {
+            if (d3.event) d3.event.stopPropagation();
+            
+            let parentTd = d3.select(this.parentElement);
+            let n = parentTd.select(".phonename");
+            let isAlreadyOpen = parentTd.select(".variant-names").size() > 0;
+            
+            closeAllVariantPopovers();
+            if (isAlreadyOpen) return;
+            
+            d3.select(this).classed("popover-open", true);
             p.vars[p.fileName] = p.rawChannels;
-            d3.select(this)
-                .on("mousedown", function () {
-                    d3.event.preventDefault();
-                    this.blur();
-                })
-                .select("path").attr("transform","translate(0,7)scale(1,-1)");
-            let n = d3.select(this.parentElement).select(".phonename");
-            n.text("");
+            
             let q = p.copyOf || p,
                 o = q.objs || [p],
                 active_fns = o.map(v=>v.fileName),
@@ -514,44 +587,21 @@ function addModel(t) {
                     return j!==-1 ? o[j] :
                         {fileName:f, dispName:q.dispNames[i]};
                 });
+                
             let nVariantNames = n.append("div").attr("class","variant-names");
-            let nVariantPopouts = n.append("div").attr("class","variant-popouts");
             let d = nVariantNames.selectAll().data(vars).join("div")
-                     .attr("class","variantName").text(v=>v.dispName),
-                w = d3.max(d.nodes(), d=>d.getBoundingClientRect().width);
-            d.style("width",w+"px");
-            d.filter(v=>v.active)
-                .style("cursor","initial")
-                .style("color", getTextColor)
-                .call(setHover, h => p =>
-                    table.selectAll("tr").filter(q=>q===p)
-                        .classed("highlight", h)
-                );
-            let c = nVariantPopouts.selectAll().data(vars).join("span")
-                .html("&nbsp;+&nbsp;").attr("class","variantPopout")
-                .style("left",(w+5)+"px")
-                .style("display",v=>v.active?"none":null);
-            [d,c].forEach(e=>e.transition().style("top",(_,i)=>i*1.3+"em"));
-            d.filter(v=>!v.active).on("mousedown", v => showVariant(q, v));
-            c.on("mousedown", function (v) {
-                showVariant(q, v);
+                     .attr("class","variantName")
+                     .classed("active", v => v.active)
+                     .text(v=>v.dispName);
+
+            d.on("click", function(v) {
+                if (d3.event) d3.event.stopPropagation();
+                closeAllVariantPopovers();
+                if (!v.active) {
+                    showVariant(q, v);
+                }
             });
-        })
-        .on("blur", function endSelect(p) {
-            if (document.activeElement === this) return;
-            p.selectInProgress = false;
-            d3.select(this)
-                .on("mousedown", null)
-                .select("path").attr("transform", null);
-            let n = d3.select(this.parentElement).select(".phonename");
-            n.selectAll("div")
-                .call(setHover, h=>p=>null)
-                .transition().style("top",0+"em").remove()
-                .end().then(()=>n.text(p=>p.dispName));
-            changeVariant(p, updateVariant);
-            table.selectAll("tr").classed("highlight", false); // Prevents some glitches
         });
-    t.filter(p=>p.isTarget).append("span").text(" Target");
 }
 
 function updateVariant(p) {

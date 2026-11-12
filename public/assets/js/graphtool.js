@@ -36,7 +36,13 @@ doc.html(`
     <section class="parts-primary">
     <div class="graphBox" data-sticky-graph="`+ alt_sticky_graph +`" data-animated="`+ alt_animated +`">
       <div class="graph-sizer">
-        <svg id="fr-graph" viewBox="0 0 800 346" data-labels-position="`+ labelsPosition +`"></svg>
+        <div class="graph-svg-wrap">
+          <svg id="fr-graph" viewBox="0 0 800 434" data-labels-position="`+ labelsPosition +`"></svg>
+          <div class="graph-header" id="graph-header">
+            <input type="text" id="graph-title-input" class="graph-header-title" aria-label="Graph title" autocomplete="off" spellcheck="false" />
+            <input type="text" id="graph-subtitle-input" class="graph-header-subtitle" aria-label="Graph subtitle" autocomplete="off" spellcheck="false" />
+          </div>
+        </div>
       </div>
 
       <div class="tools collapseTools">
@@ -76,10 +82,12 @@ doc.html(`
           </span>
         </div>
 
+        <!-- Smooth control commented out (kept for future use)
         <div class="smooth">
           <span>Smooth:</span>
           <input type="number" inputmode="decimal" id="smooth-level" required min="0" value="0" step="any" onclick="this.focus();this.select()"></input>
         </div>
+        -->
 
         <div class="miscTools">
           <button id="inspector"><span>╞</span> inspect</button>
@@ -100,6 +108,10 @@ doc.html(`
     </div>
 
       <div class="manage">
+        <div class="mobile-adj-bar" id="mobile-adj-bar">
+          <button type="button" class="mobile-adj-btn" id="btn-toggle-views">Reference Views <span class="adj-arrow">▾</span></button>
+          <button type="button" class="mobile-adj-btn" id="btn-toggle-prefs">Preference Adjustments <span class="adj-arrow">▾</span></button>
+        </div>
         <div class="customDF">
           <span>Preference Adjustments:</span>
           <div>
@@ -119,8 +131,8 @@ doc.html(`
             <span>Ear Gain (dB)</span>
           </div>
           <button id="cusdf-UnTiltTHIS" style="margin-right: 10px">Remove Adjustments</button>
-          <button id="cusdf-harmanfilters" style="margin-right: 10px">Harman Filters</button>
-          <button id="cusdf-bounds">Preference Bounds</button>
+          <!-- <button id="cusdf-harmanfilters" style="margin-right: 10px">Harman Filters</button> -->
+          <!-- <button id="cusdf-bounds">Preference Bounds</button> -->
         </div>
         <table class="manageTable">
           <colgroup>
@@ -143,6 +155,13 @@ doc.html(`
 
     <section class="parts-secondary">
       <div class="controls">
+        <div class="drawer-handle" id="drawer-toggle" role="button" aria-label="Toggle model drawer">
+          <span class="drawer-handle-bar"></span>
+          <span class="drawer-handle-text">
+            <span class="drawer-state-open">▼ Minimize</span>
+            <span class="drawer-state-closed">▲ Browse Models</span>
+          </span>
+        </div>
         <div class="select" data-selected="models">
           <div class="selector-tabs">
             <button class="brands" data-list="brands">Brands</button>
@@ -299,11 +318,13 @@ doc.html(`
 `);
 
 
-let pad = { l:15, r:15, t:10, b:36 };
-let W0 = 800, W = W0 - pad.l - pad.r,
-    H0 = 360, H = H0 - pad.t - pad.b;
+let pad = { l: 36, r: 14, t: 8, b: 26 };
+let W0 = 800, W = W0 - pad.l - pad.r, // 750 across 3 decades = exact 250.0 units/decade
+    H = W * 40 / 75,                 // Exact IEC 60263 25 dB/decade on default 40 dB span = exact 400.0 (10.0 u/dB)
+    H0 = Math.round(pad.t + H + 26); // 434 SVG viewBox height
+pad.b = H0 - pad.t - H;
 
-let gr = doc.select("#fr-graph"),
+let gr = doc.select("#fr-graph").attr("viewBox", "0 0 " + W0 + " " + H0),
     defs = gr.append("defs");
 
 
@@ -360,7 +381,7 @@ let x = d3.scaleLog()
     .range([pad.l,pad.l+W]);
 
 let yD = [40,80], // Decibels
-    yR = [pad.t+H,pad.t+10];
+    yR = [pad.t+H,pad.t];
 let y = d3.scaleLinear().domain(yD).range(yR);
 
 
@@ -394,23 +415,22 @@ function fmtY(ya) {
               "stroke-width": m ? 0.2*(1-r/45) : 0.15*(1+45/r)
           };
       });
+    let hasZero = d[0] <= 0 && d[1] >= 0;
+    let midTick = Math.round((d[0] + d[1]) / 2);
     ya.selectAll(".tick text")
       .attr("fill","var(--graph-axis-text)")
       .attr("opacity", "0.95")
-      .attr("text-anchor","start")
-      .attr("x",-W+3)
-      .attr("dy",-2)
+      .attr("text-anchor","end")
+      .attr("x",-W-5)
+      .attr("dy","0.32em")
+      .text(v => (hasZero ? v === 0 : v === midTick) ? (v + " dB") : v)
       .filter(isMinor).attr("display","none");
+
+    ya.selectAll("text.db-unit-label").remove();
 }
 let yAxisObj = gr.append("g")
     .attr("transform", "translate("+(pad.l+W)+",0)")
     .call(fmtY);
-yAxisObj.insert("text")
-    .attr("transform","rotate(-90)")
-    .attr("fill","var(--graph-axis-text)")
-    .attr("text-anchor","end")
-    .attr("y",-W-2).attr("x",-pad.t)
-    .text("dB");
 
 
 // x axis
@@ -428,8 +448,8 @@ function fmtX(xa) {
     xAxis(xa);
     (xa.selection ? xa.selection() : xa).select(".domain").remove();
     xa.selectAll(".tick line")
-      .attr("y1", 10)
-      .attr("y2", 312)
+      .attr("y1", 0)
+      .attr("y2", H)
       .attr("stroke", "var(--graph-grid-line)")
       .attr("stroke-width", (_,i) => tickThickness[getTickType(i)])
       .attr("opacity", "0.7");
@@ -499,7 +519,7 @@ rangeSel.on("click", function (_,i) {
 });
 
 
-// y-axis scaler
+// y-axis scaler state (drag handle UI commented out; scaling button still uses dB state)
 let dB = {
     y: y(60),
     h: 15,
@@ -508,6 +528,7 @@ let dB = {
     max: pad.t+H,
     tr: _ => "translate("+(pad.l-9)+","+dB.y+")"
 };
+/* Y-axis drag handle UI commented out (kept for future use)
 dB.all   = gr.append("g").attr("class","dBScaler").attr("opacity", "0.5");
 dB.trans = dB.all.append("g").attr("transform", dB.tr());
 dB.scale = dB.trans.append("g").attr("transform", "scale(1,1)");
@@ -563,6 +584,7 @@ dB.circ = dB.trans.selectAll().data([-1,1]).join("circle")
         updateBoundsScaling(h);
         dB.updatey();
     }));
+*/
 let yCenter = 60;
 dB.updatey = function (dom) {
     let d = l => l[1]-l[0];
@@ -576,15 +598,15 @@ dB.updatey = function (dom) {
 // y-axis scaler button
 const defY = dB.y;
 const scales = {
-  "20db": {name:"20dB", h:152, y:172},
-  "30db": {name:"30dB", h:101.33, y:172},
-  "40db": {name:"40dB", h: dB.H, y:defY},
-  "50db": {name:"50dB", h:60.79, y:172},
-  "crin": {name:"Crin", h:54.77, y:156.94},
+  "20db": {name:"20dB", h: 2 * dB.H, y: defY},
+  "30db": {name:"30dB", h: (4 / 3) * dB.H, y: defY},
+  "40db": {name:"40dB", h: dB.H, y: defY},
+  "50db": {name:"50dB", h: (4 / 5) * dB.H, y: defY},
+  "crin": {name:"Crin", h: dB.H * (54.77 / 76), y: defY - dB.H * (15.06 / 76)},
 }
 
 function updateBoundsScaling(h) {
-    let scale = h/76;
+    let scale = h / dB.H;
     gr.select("[id=bounds]").attr("transform", "scale(1,"+scale+")");
     gr.select("[id=bounds]").attr("transform-origin", "0 25");
 }
@@ -597,10 +619,10 @@ function changeScaling(to) {
     let sc = s.h/dB.H;
     dB.h = 15*sc;
     dB.y = s.y;
-    dB.circ.attr("cy",sm=>s.h*sm);
-    dB.scale.attr("transform", "scale(1,"+sc+")");
-    dB.mid.attrs({y:dB.y-dB.h,height:2*dB.h});
-    dB.trans.attr("transform", dB.tr());
+    if (dB.circ) dB.circ.attr("cy",sm=>s.h*sm);
+    if (dB.scale) dB.scale.attr("transform", "scale(1,"+sc+")");
+    if (dB.mid) dB.mid.attrs({y:dB.y-dB.h,height:2*dB.h});
+    if (dB.trans) dB.trans.attr("transform", dB.tr());
     btn.className = s.name.toLowerCase();
     btn.innerHTML = s.name;
     dB.updatey();
@@ -611,7 +633,6 @@ doc.select("#yscalebtn").on("click", function() {
     let keys = Object.keys(scales);
     let i = keys.indexOf(this.className);
     changeScaling(keys[(i+1)%keys.length]);
-    console.log(scales[keys[(i+1)%keys.length]]);
 });
 
 // Label drawing and screenshot
@@ -699,7 +720,7 @@ function drawLabels() {
     if (labelsPosition === "bottom-left" || labelsPosition === "bottom-right") {
         let isRight = (labelsPosition === "bottom-right");
         let startX = isRight ? 500 : 40;
-        let startY = 296;
+        let startY = pad.t + H - 28;
 
         // Measure actual rendered text widths for each model label
         let labelWidths = modelCurves.map(m => {
@@ -871,199 +892,9 @@ function drawLabels() {
 labelButton.on("click", () => (labelsShown?clearLabels:drawLabels)());
 
 
-function getDynamicFilename(ext) {
-    let activeDataPhones = activePhones.filter(p => !p.isTarget && !p.isPrefBounds && !p.hide);
-    if (!activeDataPhones.length) {
-        return "graph." + ext;
-    }
-    
-    let names = activeDataPhones.map(p => {
-        return (p.brand && p.brand.name && !p.fullName.startsWith(p.brand.name)) ? 
-               (p.brand.name + " " + (p.phone || p.dispName)) : 
-               p.fullName;
-    });
-    
-    let comparisonString = "";
-    if (names.length === 1) {
-        comparisonString = names[0];
-    } else if (names.length === 2) {
-        let b1 = activeDataPhones[0].brand ? activeDataPhones[0].brand.name : "";
-        let b2 = activeDataPhones[1].brand ? activeDataPhones[1].brand.name : "";
-        if (b1 && b1 === b2) {
-            let m1 = activeDataPhones[0].phone || activeDataPhones[0].dispName;
-            let m2 = activeDataPhones[1].phone || activeDataPhones[1].dispName;
-            comparisonString = b1 + " " + m1 + " vs. " + m2;
-        } else {
-            comparisonString = names.join(" vs. ");
-        }
-    } else {
-        comparisonString = names.join(" vs. ");
-    }
-    
-    return comparisonString + " Fc-Construct MIRE." + ext;
-}
-
-function prepareGraphForExport() {
-    let showControls = s => dB.all.attr("visibility",s?null:"hidden");
-    gpath.selectAll("path").classed("highlight",false);
-    drawLabels();
-    showControls(false);
-
-    let svgNode = document.querySelector("#fr-graph") || gr.node();
-    let bodyStyle = getComputedStyle(document.body);
-    let graphStyle = getComputedStyle(svgNode);
-    let bgColor = graphStyle.backgroundColor && graphStyle.backgroundColor !== "rgba(0, 0, 0, 0)" 
-        ? graphStyle.backgroundColor 
-        : bodyStyle.getPropertyValue("--background-color-graph").trim() || "#ffffff";
-
-    let activeThemeClass = document.body.className || "";
-    let originalSvgClass = svgNode.getAttribute("class") || "";
-    svgNode.setAttribute("class", (originalSvgClass + " " + activeThemeClass).trim());
-
-    const themeProps = [
-        "--background-color-graph",
-        "--font-color-primary",
-        "--graph-axis-text",
-        "--graph-grid-line",
-        "--inspector-bg",
-        "--inspector-border",
-        "--inspector-text",
-        "--accent-color",
-        "--accent-color-contrast"
-    ];
-    themeProps.forEach(prop => {
-        let val = bodyStyle.getPropertyValue(prop).trim();
-        if (val) svgNode.style.setProperty(prop, val);
-    });
-
-    return {
-        svgNode: svgNode,
-        bgColor: bgColor,
-        restore: () => {
-            showControls(true);
-            svgNode.setAttribute("class", originalSvgClass);
-        }
-    };
-}
-
-function compositeGraphToCanvas(svgUri, bgColor, targetW = 3840, targetH = 2160) {
-    return new Promise((resolve, reject) => {
-        let img = new Image();
-        img.onload = () => {
-            let canvas = document.createElement("canvas");
-            canvas.width = targetW;
-            canvas.height = targetH;
-            let ctx = canvas.getContext("2d");
-
-            // Transparent margins for 16:9 4K container
-            ctx.clearRect(0, 0, targetW, targetH);
-
-            // Scale to fit target dimensions while preserving native graph aspect ratio
-            let scale = Math.min(targetW / img.width, targetH / img.height);
-            let drawW = Math.round(img.width * scale);
-            let drawH = Math.round(img.height * scale);
-            let drawX = Math.round((targetW - drawW) / 2);
-            let drawY = Math.round((targetH - drawH) / 2);
-
-            ctx.drawImage(img, drawX, drawY, drawW, drawH);
-            resolve(canvas);
-        };
-        img.onerror = err => reject(err);
-        img.src = svgUri;
-    });
-}
-
-function saveGraph(ext) {
-    let prep = prepareGraphForExport();
-    let filename = getDynamicFilename(ext);
-
-    if (ext === "svg") {
-        saveSvg(prep.svgNode, filename, {
-            scale: 3,
-            backgroundColor: prep.bgColor
-        }).then(() => {
-            prep.restore();
-        }).catch(err => {
-            prep.restore();
-            console.error("Error saving SVG:", err);
-        });
-        if (analyticsEnabled) { pushEventTag("clicked_download", targetWindow); }
-        return;
-    }
-
-    // Default to 4K 16:9 PNG
-    let targetW = 3840, targetH = 2160;
-    let exportScale = targetW / 800;
-
-    svgAsPngUri(prep.svgNode, {
-        scale: exportScale,
-        backgroundColor: prep.bgColor
-    }).then(uri => {
-        prep.restore();
-        return compositeGraphToCanvas(uri, prep.bgColor, targetW, targetH);
-    }).then(canvas => {
-        canvas.toBlob(blob => {
-            if (!blob) throw new Error("Failed to generate image blob");
-            let url = URL.createObjectURL(blob);
-            let a = document.createElement("a");
-            a.download = filename;
-            a.href = url;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 2000);
-        }, "image/png");
-    }).catch(err => {
-        prep.restore();
-        console.error("Error saving graph:", err);
-    });
-
-    if (analyticsEnabled) { pushEventTag("clicked_download", targetWindow); }
-}
-
-function copyGraphScreenshot() {
-    let prep = prepareGraphForExport();
-    let screenshotBtn = document.querySelector("button#screenshot-btn");
-    let targetW = 3840, targetH = 2160;
-    let exportScale = targetW / 800;
-
-    svgAsPngUri(prep.svgNode, {
-        scale: exportScale,
-        backgroundColor: prep.bgColor
-    }).then(uri => {
-        prep.restore();
-        return compositeGraphToCanvas(uri, prep.bgColor, targetW, targetH);
-    }).then(canvas => {
-        return new Promise((resolve, reject) => {
-            canvas.toBlob(blob => {
-                if (!blob) return reject(new Error("Failed to generate image blob"));
-                resolve(blob);
-            }, "image/png");
-        });
-    }).then(blob => {
-        if (navigator.clipboard && window.ClipboardItem) {
-            return navigator.clipboard.write([
-                new ClipboardItem({ "image/png": blob })
-            ]);
-        } else {
-            throw new Error("Clipboard API not supported");
-        }
-    }).then(() => {
-        if (screenshotBtn) {
-            screenshotBtn.classList.add("clicked");
-            setTimeout(() => {
-                screenshotBtn.classList.remove("clicked");
-            }, 600);
-        }
-    }).catch(err => {
-        prep.restore();
-        console.error("Error copying screenshot to clipboard:", err);
-    });
-
-    if (analyticsEnabled) { pushEventTag("clicked_screenshot", targetWindow); }
-}
+// 4K 16:9 export & clipboard screenshot logic lives in assets/js/tool_components/export4k.js
 doc.select("#download")
-    .on("click", () => saveGraph("png"))
+    .on("click", () => window.saveGraph4K && window.saveGraph4K("png"))
     .on("contextmenu", function () {
         d3.event.returnValue=false;
         let b = d3.select(this);
@@ -1073,7 +904,7 @@ doc.select("#download")
                      background:"inherit", padding:"0.1em 1em"})
             .text(d => "As ."+d)
             .on("click", function (d) {
-                saveGraph(d);
+                if (window.saveGraph4K) window.saveGraph4K(d);
                 choice.remove();
                 d3.event.stopPropagation();
             });
@@ -1082,6 +913,7 @@ doc.select("#download")
 
 // Smoothing math lives in assets/js/smoothing.js.
 
+/* Smooth input listener commented out (kept for future use)
 doc.select("#smooth-level").on("change input", function () {
     if (!this.checkValidity()) return;
     smooth_level = +this.value;
@@ -1090,6 +922,7 @@ doc.select("#smooth-level").on("change input", function () {
     activePhones.forEach(smoothPhone);
     updatePaths();
 });
+*/
 
 
 // ISO 226 loudness normalization math lives in assets/js/normalization.js.
@@ -1716,7 +1549,7 @@ var activePhones = [];
 let baseline0 = { p:null, l:null, fn:l=>l },
     baseline = baseline0;
 
-let gpath = gr.insert("g",".dBScaler")
+let gpath = gr.insert("g",".dBScaler, g.labels-layer, g.tools-layer")
     .attr("fill","none")
     .attr("stroke-width",2.1)
     .attr("class", "curves-g")
@@ -1962,14 +1795,16 @@ function addPhonesToUrl() {
     if (tiltableTargets.some(target => names.includes(target + " Target"))) {
         url += "&bass="+boost+"&tilt="+tilt+"&treble="+treble+"&ear="+ear;
     }
-    if (names.length === 1) {
-        targetWindow.document.querySelector("link[rel='canonical']").setAttribute("href",url)
-    } else {
-        targetWindow.document.querySelector("link[rel='canonical']").setAttribute("href",baseURL)
+    let canLink = targetWindow.document.querySelector("link[rel='canonical']");
+    if (canLink) {
+        canLink.setAttribute("href", names.length === 1 ? url : baseURL);
     }
     targetWindow.history.replaceState("", title, url);
     targetWindow.document.title = title;
-    targetWindow.document.querySelector("meta[name='description']").setAttribute("content",baseDescription + ", including " + namesCombined +".");
+    let metaDesc = targetWindow.document.querySelector("meta[name='description']");
+    if (metaDesc) {
+        metaDesc.setAttribute("content", baseDescription + ", including " + namesCombined + ".");
+    }
 }
 
 function setModeEmbed() {
@@ -2029,6 +1864,7 @@ function updatePaths(trigger) {
     if (targetColorCustom) t.attr("stroke", targetColorCustom);
     if (ifURL && !trigger) addPhonesToUrl();
     if (stickyLabels) drawLabels();
+    if (typeof window.syncGraphHeader === "function") { window.syncGraphHeader(); }
 }
 
 // Preference bounds (loadPrefBounds, setPrefBounds, prepPrefBounds, prefBoundsObj)
@@ -2094,27 +1930,6 @@ norms.select("input")
     });
 norms.select("span").on("click", (_,i)=>setNorm(_,i,false));
 
-let addPhoneSet = false, // Whether add phone button was clicked
-    addPhoneLock= false;
-function setAddButton(a) {
-    if (addPhoneSet !== a) {
-        addPhoneSet = a;
-        doc.select(".addPhone").classed("selected", a)
-            .classed("locked", addPhoneLock &= a);
-    }
-    return true;
-}
-doc.select(".addPhone").selectAll("td")
-    .on("click", ()=>setAddButton(!addPhoneSet));
-doc.select(".addLock").on("click", function () {
-    d3.event.preventDefault();
-    let on = !addPhoneLock;
-    if (!setAddButton(on)) return;
-    if (on) {
-        doc.select(".addPhone").classed("locked", addPhoneLock=true);
-    }
-});
-
 function showPhone(p, exclusive, suppressVariant, trigger) {
     if (!p.copyOf && p.fileNames && p.fileNames.length && p.fileName !== p.fileNames[0]) {
         p.fileName = p.fileNames[0];
@@ -2142,12 +1957,6 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         if (activePhones.filter(e => e.fileName === p.fileName).length > 0) {
             activePhones = activePhones.filter(e => e.fileName !== p.fileName && e.phone !== "Custom Tilt");
             updatePhoneTable();
-        }
-    }
-    if (addPhoneSet) {
-        exclusive = false;
-        if (!addPhoneLock) {
-            setAddButton(false);
         }
     }
     let keep = !exclusive ? (q=>true)
@@ -2207,7 +2016,7 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         p.active = true;
         setCurves(p, false, avg ? 1 : undefined);
     }
-    if (p.isTarget && tiltableTargets.includes(p.dispName)) { // Tilt the target
+    if (p.isTarget && tiltableTargets.includes(p.dispName) && p.phone !== "Custom Tilt") { // Tilt the target
         if (p.dispName === "Fc-Construct DF-HRTF") {
             customTiltName = p.dispName;
             if (df !== p) {
@@ -2700,7 +2509,7 @@ Promise.all([
 
         let phoneObj = { isTarget:true, brand:brand, phone:"Custom Tilt",
             fullName:targetPrefix + preferenceAdjustments,
-            dispName:targetPrefix + preferenceAdjustments,
+            dispName:targetPrefix,
             fileName:targetPrefix + " Target",
             // basedOn: when dfBaseline auto-applies dfBase, the original `df`
             // target has been filtered out of activePhones, so the Custom Tilt
@@ -3068,6 +2877,9 @@ doc.select("#inspector").on("click", function () {
     let btn = d3.select(this);
     interactInspect = !interactInspect;
     btn.classed("selected", interactInspect);
+    if (typeof window.syncGraphToolOverlayState === "function") {
+        window.syncGraphToolOverlayState();
+    }
     if (!interactInspect) {
         stopInspect();
     }
@@ -3148,7 +2960,7 @@ function mapScreenshotBtn() {
     let screenshotBtn = document.querySelector("button#screenshot-btn");
     if (screenshotBtn) {
         screenshotBtn.addEventListener("click", function() {
-            copyGraphScreenshot();
+            if (window.copyGraphScreenshot4K) window.copyGraphScreenshot4K();
         });
     }
 }
@@ -3191,26 +3003,33 @@ function focusedListSwipes() {
     let horizontalSwipeTarget = document.querySelector("div.scroll-container"),
         listsContainer = document.querySelector("div.select"),
         swipableList = document.querySelector("div.scrollOuter[data-list=\"models\"]");
-    touchDelta = 0;
+    
+    if (!horizontalSwipeTarget || !listsContainer || !swipableList) return;
+
+    let touchDelta = 0,
+        touchStart = 0,
+        selectedList = "";
     
     horizontalSwipeTarget.addEventListener("touchstart", function(e) {
         selectedList = listsContainer.getAttribute("data-selected");
         touchStart = e.targetTouches[0].screenX;
+        touchDelta = 0;
+    }, { passive: true });
 
-        horizontalSwipeTarget.addEventListener("touchmove", function(e) {
-            touchNow = e.targetTouches[0].screenX;
-            touchDelta = touchNow - touchStart,
-            touchDeltaNegative = 0 - touchDelta;
-            
-            if ( selectedList === "models" && touchDelta > 0 && touchDelta < 100 ) {
-                swipableList.setAttribute("style","right: "+ touchDeltaNegative +"px;")
-            }
-            
-            if ( selectedList === "brands" && touchDelta < 0 && touchDelta > -100 ) {
-                swipableList.setAttribute("style","right: "+ touchDeltaNegative +"px;")
-            }
-        });
-    });
+    horizontalSwipeTarget.addEventListener("touchmove", function(e) {
+        if (!touchStart) return;
+        let touchNow = e.targetTouches[0].screenX;
+        touchDelta = touchNow - touchStart;
+        let touchDeltaNegative = 0 - touchDelta;
+        
+        if ( selectedList === "models" && touchDelta > 0 && touchDelta < 100 ) {
+            swipableList.setAttribute("style","right: "+ touchDeltaNegative +"px;");
+        }
+        
+        if ( selectedList === "brands" && touchDelta < 0 && touchDelta > -100 ) {
+            swipableList.setAttribute("style","right: "+ touchDeltaNegative +"px;");
+        }
+    }, { passive: true });
 
     horizontalSwipeTarget.addEventListener("touchend", function(e) {
         if ( touchDelta > 49 ) {
@@ -3221,12 +3040,9 @@ function focusedListSwipes() {
             listsContainer.setAttribute("data-selected","models");
         }
         
-        swipableList.setAttribute("style","")
+        swipableList.setAttribute("style","");
         touchStart = 0;
-        touchNow = 0;
         touchDelta = 0;
-        
-        //horizontalSwipeTarget.removeEventListener("touchmove");
     });
 }
 focusedListSwipes();
@@ -3249,7 +3065,6 @@ function setFocusedPanel() {
         primaryPanel = document.querySelector(".parts-primary"),
         secondaryPanel = document.querySelector(".parts-secondary"),
         phonesList = document.querySelector("div#phones"),
-        graphBox = document.querySelector("div.graph-sizer"),
         mobileHelper = document.querySelector("tr.mobile-helper");
     
     if (panelsContainer) {
@@ -3262,57 +3077,73 @@ function setFocusedPanel() {
         });
     }
 
-    if (secondaryPanel && panelsContainer) {
-        secondaryPanel.addEventListener("click", function() {
-            panelsContainer.setAttribute("data-focused-panel","secondary");
+    let drawerToggle = document.querySelector("#drawer-toggle");
+    if (drawerToggle && panelsContainer) {
+        drawerToggle.addEventListener("click", function(e) {
+            e.stopPropagation();
+            let current = panelsContainer.getAttribute("data-focused-panel");
+            panelsContainer.setAttribute("data-focused-panel", current === "primary" ? "secondary" : "primary");
         });
     }
-    
-    if (graphBox && panelsContainer) {
-        graphBox.addEventListener("click", function() {
-            let previousState = panelsContainer.getAttribute("data-focused-panel");
-            
-            if ( previousState === "primary") {
+
+    if (secondaryPanel && panelsContainer) {
+        secondaryPanel.addEventListener("click", function(e) {
+            // When collapsed, tapping anywhere on the visible drawer peek expands it
+            if (panelsContainer.getAttribute("data-focused-panel") === "primary") {
                 panelsContainer.setAttribute("data-focused-panel","secondary");
-            } else if ( previousState === "secondary" ) {
-                panelsContainer.setAttribute("data-focused-panel","primary");
+            }
+        });
+    }
+
+    if (primaryPanel && panelsContainer) {
+        primaryPanel.addEventListener("click", function(e) {
+            // Tap-to-dismiss: when drawer is open, tapping anywhere outside on the upper panel dismisses it
+            if (panelsContainer.getAttribute("data-focused-panel") === "secondary" && window.innerWidth <= 1000) {
+                panelsContainer.setAttribute("data-focused-panel", "primary");
             }
         });
     }
     
-    // Touch events
-    let verticalSwipeTargets = document.querySelectorAll("div.selector-tabs, input.search");
+    // Vertical swipe targets on drawer handle and tabs (excludes input.search to avoid keyboard typing conflicts)
+    let verticalSwipeTargets = document.querySelectorAll("div.drawer-handle, div.selector-tabs");
     
     verticalSwipeTargets.forEach(function(target) {
+        let touchStart = 0,
+            touchDelta = 0,
+            focusedPanel = "";
+
         target.addEventListener("touchstart", function(e) {
-            focusedPanel = document.querySelector("main.main").getAttribute("data-focused-panel");
-
+            let panels = document.querySelector("main.main");
+            focusedPanel = panels ? panels.getAttribute("data-focused-panel") : "secondary";
             touchStart = e.targetTouches[0].screenY;
+            touchDelta = 0;
+        }, { passive: true });
 
-            target.addEventListener("touchmove", function(e) {
-                touchNow = e.targetTouches[0].screenY;
-                touchDelta = touchNow - touchStart;
+        target.addEventListener("touchmove", function(e) {
+            if (!touchStart) return;
+            let touchNow = e.targetTouches[0].screenY;
+            touchDelta = touchNow - touchStart;
 
-                if ( focusedPanel === "secondary" && touchDelta > 0 && touchDelta < 200) {
-                    secondaryPanel.setAttribute("style", "top: " + touchDelta + "px;")
-                } else if ( focusedPanel === "primary" && touchDelta < 0 && touchDelta > -200) {
-                    secondaryPanel.setAttribute("style", "top: " + touchDelta + "px;")
-                }
-            });
-        });
+            if ( focusedPanel === "secondary" && touchDelta > 0 && touchDelta < 200 && secondaryPanel) {
+                secondaryPanel.setAttribute("style", "top: " + touchDelta + "px;");
+            } else if ( focusedPanel === "primary" && touchDelta < 0 && touchDelta > -200 && secondaryPanel) {
+                secondaryPanel.setAttribute("style", "top: " + touchDelta + "px;");
+            }
+        }, { passive: true });
 
         target.addEventListener("touchend", function(e) {
-            if ( touchDelta > 49 ) {
+            if ( touchDelta > 49 && panelsContainer ) {
                 panelsContainer.setAttribute("data-focused-panel","primary");
             }
 
-            if ( touchDelta < -50 ) {
+            if ( touchDelta < -50 && panelsContainer ) {
                 panelsContainer.setAttribute("data-focused-panel","secondary");
             }
 
-            secondaryPanel.setAttribute("style", "")
+            if (secondaryPanel) {
+                secondaryPanel.setAttribute("style", "");
+            }
             touchStart = 0;
-            touchNow = 0;
             touchDelta = 0;
         });
     
@@ -3330,6 +3161,129 @@ function setFocusedPanel() {
     });
 }
 setFocusedPanel();
+
+// Mobile Top Adjustments Tray (Views / Preferences)
+function initMobileAdjustments() {
+    let btnViews = document.querySelector("#btn-toggle-views"),
+        btnPrefs = document.querySelector("#btn-toggle-prefs");
+
+    if (btnViews) {
+        btnViews.addEventListener("click", function(e) {
+            e.stopPropagation();
+            let targets = document.querySelector(".targets");
+            let prefs = document.querySelector(".customDF");
+            let isOpen = targets && targets.classList.contains("mobile-tray-open");
+
+            if (prefs) prefs.classList.remove("mobile-tray-open");
+            if (btnPrefs) btnPrefs.classList.remove("active");
+
+            if (targets) {
+                targets.classList.toggle("mobile-tray-open", !isOpen);
+                btnViews.classList.toggle("active", !isOpen);
+            }
+        });
+    }
+
+    if (btnPrefs) {
+        btnPrefs.addEventListener("click", function(e) {
+            e.stopPropagation();
+            let targets = document.querySelector(".targets");
+            let prefs = document.querySelector(".customDF");
+            let isOpen = prefs && prefs.classList.contains("mobile-tray-open");
+
+            if (targets) targets.classList.remove("mobile-tray-open");
+            if (btnViews) btnViews.classList.remove("active");
+
+            if (prefs) {
+                prefs.classList.toggle("mobile-tray-open", !isOpen);
+                btnPrefs.classList.toggle("active", !isOpen);
+            }
+        });
+    }
+}
+initMobileAdjustments();
+
+// Shared horizontal drag + wheel scroll helper for compact mobile tool strips
+function enableHorizontalDragScroll(el) {
+    if (!el || el.dataset.dragScrollBound === "true") return;
+    el.dataset.dragScrollBound = "true";
+
+    let isDown = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let hasDragged = false;
+
+    el.addEventListener("mousedown", function(e) {
+        if (e.button !== 0) return;
+        if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
+        if (el.scrollWidth <= el.clientWidth) return;
+        isDown = true;
+        hasDragged = false;
+        startX = e.clientX;
+        startScrollLeft = el.scrollLeft;
+        el.classList.add("is-dragging");
+    });
+
+    window.addEventListener("mousemove", function(e) {
+        if (!isDown) return;
+        let dx = e.clientX - startX;
+        if (Math.abs(dx) > 4) {
+            hasDragged = true;
+            e.preventDefault();
+        }
+        el.scrollLeft = startScrollLeft - dx;
+    });
+
+    window.addEventListener("mouseup", function() {
+        if (!isDown) return;
+        isDown = false;
+        el.classList.remove("is-dragging");
+        if (hasDragged) {
+            let blockClick = function(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+            };
+            window.addEventListener("click", blockClick, true);
+            setTimeout(function() {
+                window.removeEventListener("click", blockClick, true);
+            }, 0);
+        }
+    });
+
+    el.addEventListener("wheel", function(e) {
+        if (el.scrollWidth <= el.clientWidth) return;
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+            el.scrollLeft += e.deltaY;
+            e.preventDefault();
+        }
+    }, { passive: false });
+}
+window.enableHorizontalDragScroll = enableHorizontalDragScroll;
+enableHorizontalDragScroll(document.querySelector("div.tools"));
+
+function initMobileGraphTopSync() {
+    let mainEl = document.querySelector("main.main");
+    let graphBox = document.querySelector("div.graphBox");
+    if (!mainEl || !graphBox) return;
+
+    function syncTop() {
+        if (window.innerWidth > 1000) {
+            mainEl.style.removeProperty("--graph-total-top");
+            return;
+        }
+        let h = graphBox.getBoundingClientRect().height;
+        if (h > 0) {
+            mainEl.style.setProperty("--graph-total-top", Math.round(h) + "px");
+        }
+    }
+
+    if (typeof ResizeObserver !== "undefined") {
+        new ResizeObserver(syncTop).observe(graphBox);
+    }
+    window.addEventListener("resize", syncTop);
+    requestAnimationFrame(syncTop);
+}
+initMobileGraphTopSync();
 
 // Blur focus from inputs on submit
 function blurFocus() {
@@ -3380,15 +3334,13 @@ function addHeader() {
     
     headerButton.className = "header-button";
     headerLogoElem.className = "logo";
-    headerLogoElem.setAttribute('style', "margin-right: 0;");
     headerLogoLink.setAttribute('href', site_url);
-    headerLogoLink.setAttribute('style', "display:inline-flex; align-items:center; white-space:nowrap;");
     headerLogoSpan.innerText = headerLogoText;
-    headerLogoSpan.setAttribute('style', "color: #ffffff; margin-right:10px; margin-left: auto;"); 
     headerLogoLink.append(headerLogoSpan);
-    headerLogoImg.setAttribute("src", headerLogoImgUrl);
-    headerLogoImg.setAttribute('style', "width:auto; height: 24px; margin-right:auto; fill: #ffffff;");
-    headerLogoLink.append(headerLogoImg);
+    if (headerLogoImgUrl) {
+        headerLogoImg.setAttribute("src", headerLogoImgUrl);
+        headerLogoLink.append(headerLogoImg);
+    }
     
     altHeaderElem.append(headerButton);
     headerButton.setAttribute('style', "background-color: #ffffff");
@@ -3754,15 +3706,15 @@ function userConfigApplyViewSettings(phoneInTable) {
                     baselineButton  = row.querySelector("td.button-baseline"),
                     pinButton = row.querySelector("td.button-pin");
 
-                if (phone.isHidden && !hideButton.classList.contains("selected")) {
+                if (hideButton && phone.isHidden && !hideButton.classList.contains("selected")) {
                     hideButton.click();
                 }
 
-                if (phone.isBaseline && !baselineButton.classList.contains("selected")) {
+                if (baselineButton && phone.isBaseline && !baselineButton.classList.contains("selected")) {
                     baselineButton.click();
                 }
 
-                if (phone.isPinned && pinButton.getAttribute('data-pinned') !== "true") {
+                if (pinButton && phone.isPinned && pinButton.getAttribute('data-pinned') !== "true") {
                     pinButton.click();
                 }
             }
@@ -3791,11 +3743,3 @@ function userConfigApplyNormalization() {
     
     userConfigApplicationActive = 0;
 }
-
-
-doc.select("#inspector").on("click", function () {
-    stopInspect();
-    let btn = d3.select(this);
-    interactInspect = !interactInspect;
-    btn.classed("selected", interactInspect);
-});

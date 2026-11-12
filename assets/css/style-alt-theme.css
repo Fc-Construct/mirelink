@@ -10,6 +10,8 @@
     --background-color-graph: hsl(0, 0%, 100%);
     
     --background-color-inputs: hsl(0, 0%, 100%);
+    --background-color-selected: hsl(0, 0%, 88%);
+    --font-color-selected: hsl(0, 0%, 0%);
 
     --card-unselected-bg: #ffffff;
     --card-unselected-text: #18181b;
@@ -56,6 +58,8 @@ body.theme-dark {
     --background-color-graph: hsl(0, 0%, 8%);
 
     --background-color-inputs: hsl(0, 0%, 15%);
+    --background-color-selected: hsl(0, 0%, 18%);
+    --font-color-selected: hsl(0, 0%, 100%);
 
     --card-unselected-bg: #0f0f0f;
     --card-unselected-text: #d9d9d9;
@@ -102,6 +106,8 @@ body.theme-contrast {
     --background-color-graph: hsl(0, 0%, 100%);
     
     --background-color-inputs: hsl(0, 0%, 100%);
+    --background-color-selected: hsl(0, 0%, 90%);
+    --font-color-selected: hsl(0, 0%, 0%);
 
     --card-unselected-bg: #ffffff;
     --card-unselected-text: #000000;

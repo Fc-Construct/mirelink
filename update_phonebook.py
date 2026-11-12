@@ -328,5 +328,4 @@ def generate_file_inventory():
 
 if __name__ == "__main__":
     update_phonebook()
-    generate_file_inventory()
 

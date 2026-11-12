@@ -36,8 +36,6 @@ function calculateConfidenceIntervals(rawChannels) {
         lowerBounds.push([frequency, confidenceInterval.lower]);
   }
 
-  console.log([upperBounds, lowerBounds]);
-
   // Prompt user to download upper bounds
   function downloadFile(data, filename) {
     const formattedData = data.map(item => item.join(', ')).join('\n');
