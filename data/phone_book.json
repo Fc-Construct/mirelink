@@ -364,5 +364,32 @@
         ]
       }
     ]
+  },
+  {
+    "name": "Mirph",
+    "phones": [
+      {
+        "name": "Vitrum",
+        "file": [
+          "Mirph Vitrum",
+          "Mirph Vitrum G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "Vitrum ZMF",
+        "file": [
+          "Mirph Vitrum ZMF",
+          "Mirph Vitrum ZMF G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      }
+    ]
   }
 ]
