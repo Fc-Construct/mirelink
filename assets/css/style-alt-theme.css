@@ -1,6 +1,7 @@
 
 /* Primary color theme */
 :root {
+    color-scheme: light;
     --accent-color: hsl(0, 0%, 0%);
     --accent-color-contrast: hsl(0, 0%, 55%);
 
@@ -49,6 +50,7 @@
 }
 
 body.theme-dark {
+    color-scheme: dark;
     --accent-color: hsl(0, 0%, 100%);
     --accent-color-contrast: hsl(0, 0%, 50%);
 
@@ -97,6 +99,7 @@ body.theme-dark {
 }
 
 body.theme-contrast {
+    color-scheme: light;
     --accent-color: hsl(0, 0%, 0%);
     --accent-color-contrast: hsl(0, 0%, 0%);
 

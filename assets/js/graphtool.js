@@ -39,8 +39,8 @@ doc.html(`
         <div class="graph-svg-wrap">
           <svg id="fr-graph" viewBox="0 0 800 434" data-labels-position="`+ labelsPosition +`"></svg>
           <div class="graph-header" id="graph-header">
-            <input type="text" id="graph-title-input" class="graph-header-title" aria-label="Graph title" autocomplete="off" spellcheck="false" />
-            <input type="text" id="graph-subtitle-input" class="graph-header-subtitle" aria-label="Graph subtitle" autocomplete="off" spellcheck="false" />
+            <div contenteditable="true" id="graph-title-input" class="graph-header-title" aria-label="Graph title" spellcheck="false"></div>
+            <div contenteditable="true" id="graph-subtitle-input" class="graph-header-subtitle" aria-label="Graph subtitle" spellcheck="false"></div>
           </div>
         </div>
       </div>
@@ -593,6 +593,7 @@ dB.updatey = function (dom) {
     let getTr = o => o ? "translate(0,"+(y(o)-y(0))+")" : null;
     //clearLabels();
     gpath.selectAll("path").call(redrawLine);
+    if (typeof window.refreshCalcBadge === "function") { window.refreshCalcBadge(); }
 }
 
 // y-axis scaler button
@@ -934,41 +935,149 @@ let getO = i => LR.length>1 ? -1+i*2/(LR.length-1) : 0;
 const sampnums = typeof num_samples !== "undefined" ? d3.range(1,num_samples+1)
                                                     : [""];
 
+const CUSTOM_VIEWS_STORAGE_KEY = "mirelink_custom_views_v1";
 let savedCustomViews = [];
+let customViewCounter = 1;
 let activeCustomViewId = null;
 
-function renderTargetsUI() {
-    let isPresetDF = (tilt === 0 && boost === 0 && treble === 0 && ear === 0);
-    let isPresetTilt10 = (tilt === -1 && boost === 0 && treble === 0 && ear === 0);
+function roundPresetVal(v) {
+    let n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return Math.round(n * 1000) / 1000;
+}
 
-    // Check if current adjustments match an already-saved custom view
-    let matchingSaved = savedCustomViews.find(cv => cv.tilt === tilt && cv.boost === boost && cv.ear === ear && cv.treble === treble);
-    let isLiveCustom = !isPresetDF && !isPresetTilt10 && !matchingSaved;
+function samePresetParams(a, b) {
+    if (!a || !b) return false;
+    return Math.abs((+a.tilt || 0) - (+b.tilt || 0)) < 1e-6 &&
+           Math.abs((+a.boost || 0) - (+b.boost || 0)) < 1e-6 &&
+           Math.abs((+a.ear || 0) - (+b.ear || 0)) < 1e-6 &&
+           Math.abs((+a.treble || 0) - (+b.treble || 0)) < 1e-6;
+}
 
-    let targetsContainer = doc.select(".targets");
-    if (targetsContainer.empty()) return;
-    targetsContainer.html("");
+function isPresetDFParams(p) {
+    let cur = p || { boost, tilt, ear, treble };
+    return Math.abs(+cur.tilt || 0) < 1e-6 &&
+           Math.abs(+cur.boost || 0) < 1e-6 &&
+           Math.abs(+cur.ear || 0) < 1e-6 &&
+           Math.abs(+cur.treble || 0) < 1e-6;
+}
 
-    let b = window.brandTarget;
-    if (!b) return;
+function isPresetTilt10Params(p) {
+    let cur = p || { boost, tilt, ear, treble };
+    return Math.abs((+cur.tilt || 0) - (-1)) < 1e-6 &&
+           Math.abs(+cur.boost || 0) < 1e-6 &&
+           Math.abs(+cur.ear || 0) < 1e-6 &&
+           Math.abs(+cur.treble || 0) < 1e-6;
+}
 
-    let l = (text,c) => s => s.append("div").attr("class","targetLabel").append("span").text(text);
+function syncCustomCounterFloor() {
+    let minNext = 1;
+    savedCustomViews.forEach(cv => {
+        let m = String(cv.name || "").match(/^CUSTOM\s+(\d+)$/i);
+        if (m) {
+            let n = parseInt(m[1], 10);
+            if (Number.isFinite(n) && n >= minNext) minNext = n + 1;
+        }
+    });
+    if (customViewCounter < minNext) {
+        customViewCounter = minNext;
+    }
+}
 
-    // Helper to calculate the next automatic CUSTOM N number
-    function getNextCustomNumber() {
-        let maxNum = 0;
-        savedCustomViews.forEach(cv => {
-            let m = cv.name.match(/^CUSTOM\s+(\d+)$/i);
-            if (m) {
-                let n = parseInt(m[1], 10);
-                if (n > maxNum) maxNum = n;
-            }
-        });
-        return Math.max(maxNum + 1, savedCustomViews.length + 1);
+function loadCustomViewsState() {
+    try {
+        let raw = window.localStorage ? window.localStorage.getItem(CUSTOM_VIEWS_STORAGE_KEY) : null;
+        if (!raw) return;
+        let parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.views)) {
+            savedCustomViews = parsed.views
+                .filter(cv => cv && typeof cv.name === "string")
+                .map((cv, idx) => ({
+                    id: cv.id || (Date.now() + idx),
+                    name: String(cv.name).trim() || ("CUSTOM " + (idx + 1)),
+                    tilt: roundPresetVal(cv.tilt),
+                    boost: roundPresetVal(cv.boost),
+                    ear: roundPresetVal(cv.ear),
+                    treble: roundPresetVal(cv.treble)
+                }));
+        }
+        if (parsed && Number.isFinite(Number(parsed.counter))) {
+            customViewCounter = Math.max(1, Math.floor(Number(parsed.counter)));
+        }
+    } catch (_) {}
+    syncCustomCounterFloor();
+}
+
+function saveCustomViewsState() {
+    syncCustomCounterFloor();
+    try {
+        if (window.localStorage) {
+            window.localStorage.setItem(CUSTOM_VIEWS_STORAGE_KEY, JSON.stringify({
+                counter: customViewCounter,
+                views: savedCustomViews
+            }));
+        }
+    } catch (_) {}
+}
+
+function getNextCustomName() {
+    syncCustomCounterFloor();
+    return "CUSTOM " + customViewCounter;
+}
+
+function resolveCurrentCustomState() {
+    let current = {
+        tilt: roundPresetVal(tilt),
+        boost: roundPresetVal(boost),
+        ear: roundPresetVal(ear),
+        treble: roundPresetVal(treble)
+    };
+    let isPresetDF = isPresetDFParams(current);
+    let isPresetTilt10 = isPresetTilt10Params(current);
+
+    let activeSaved = activeCustomViewId !== null
+        ? (savedCustomViews.find(cv => cv.id === activeCustomViewId) || null)
+        : null;
+
+    // Clear stale activeCustomViewId immediately if adjustments drifted away
+    if (activeSaved && !samePresetParams(activeSaved, current)) {
+        activeCustomViewId = null;
+        activeSaved = null;
     }
 
+    let matchingSaved = activeSaved || (!isPresetDF && !isPresetTilt10
+        ? (savedCustomViews.find(cv => samePresetParams(cv, current)) || null)
+        : null);
+
+    if (matchingSaved && !isPresetDF && !isPresetTilt10) {
+        activeCustomViewId = matchingSaved.id;
+    } else if (isPresetDF || isPresetTilt10) {
+        activeCustomViewId = null;
+        matchingSaved = null;
+    }
+
+    let isLiveCustom = !isPresetDF && !isPresetTilt10 && !matchingSaved;
+    return {
+        current: current,
+        isPresetDF: isPresetDF,
+        isPresetTilt10: isPresetTilt10,
+        matchingSaved: matchingSaved,
+        isLiveCustom: isLiveCustom
+    };
+}
+
+loadCustomViewsState();
+
+function renderTargetsUI() {
+    let targetsContainer = doc.select(".targets");
+    if (targetsContainer.empty()) return;
+    if (!window.brandTarget) return;
+
+    let state = resolveCurrentCustomState();
+    let liveCustomDefaultName = getNextCustomName();
+
     // Helper for in-place renaming of a custom view
-    function startRename(labelSpan, currentName, onSave) {
+    function startRename(labelSpan, currentName, onSave, onCancel) {
         let input = document.createElement("input");
         input.type = "text";
         input.value = currentName;
@@ -1003,7 +1112,8 @@ function renderTargetsUI() {
             } else if (e.key === "Escape") {
                 e.preventDefault();
                 finished = true;
-                renderTargetsUI();
+                if (typeof onCancel === "function") onCancel();
+                else renderTargetsUI();
             }
         });
         input.addEventListener("blur", function() {
@@ -1017,21 +1127,27 @@ function renderTargetsUI() {
         });
     }
 
-    // Single unified REFERENCE VIEW section containing all view presets (default and custom)
-    let refContainer = targetsContainer.append("div").attr("class", "targetClass");
-    refContainer.call(l("Reference View"));
+    // One-time migration from initial static targets markup into structured ref-view-group
+    if (targetsContainer.select("div.ref-view-group").empty()) {
+        targetsContainer.html("");
+    }
 
-    // 1. Default presets
+    let refContainer = targetsContainer.selectAll("div.targetClass.ref-view-group")
+        .data([1])
+        .join(enter => {
+            let rc = enter.append("div").attr("class", "targetClass ref-view-group");
+            rc.append("div").attr("class", "targetLabel").append("span").text("Reference View");
+            return rc;
+        });
+
+    // 1. Built-in presets (keyed join preserves DOM nodes)
     let refFiles = ["Fc-Construct DF-HRTF", "10 dB downwards tilt"];
-    refFiles.forEach(name => {
-        let active = false;
-        if (name === "Fc-Construct DF-HRTF" && isPresetDF && !isLiveCustom && activeCustomViewId === null) active = true;
-        if (name === "10 dB downwards tilt" && isPresetTilt10 && !isLiveCustom && activeCustomViewId === null) active = true;
-
-        refContainer.append("div")
-            .attr("class", "target" + (active ? " active" : ""))
-            .text(name)
-            .on("click", function() {
+    let defaultPills = refContainer.selectAll("div.target.custom-default-pill")
+        .data(refFiles, d => d)
+        .join(enter => enter.append("div")
+            .attr("class", "target custom-default-pill")
+            .text(d => d)
+            .on("click", function(name) {
                 activeCustomViewId = null;
                 if (name === "Fc-Construct DF-HRTF") {
                     tilt = 0; boost = 0; ear = 0; treble = 0;
@@ -1040,17 +1156,67 @@ function renderTargetsUI() {
                 }
                 updateDispVals();
                 updateDF(boost, tilt, ear, treble);
-                renderTargetsUI();
-            });
+            }))
+        .order();
+
+    defaultPills.classed("active", name => {
+        if (name === "Fc-Construct DF-HRTF") return state.isPresetDF && !state.isLiveCustom && activeCustomViewId === null;
+        if (name === "10 dB downwards tilt") return state.isPresetTilt10 && !state.isLiveCustom && activeCustomViewId === null;
+        return false;
     });
 
-    // 2. Previously saved CUSTOM presets
-    savedCustomViews.forEach((cv, idx) => {
-        let active = (matchingSaved && matchingSaved.id === cv.id) || (activeCustomViewId === cv.id && !isLiveCustom);
-        let cvPill = refContainer.append("div")
-            .attr("class", "target" + (active ? " active" : ""))
-            .attr("title", "Click to select, double-click to rename")
-            .on("click", function() {
+    // 2. Saved CUSTOM presets (keyed by cv.id so click never destroys DOM nodes before dblclick)
+    let savedPills = refContainer.selectAll("div.target.custom-saved-pill")
+        .data(savedCustomViews, d => d.id)
+        .join(enter => {
+            let pill = enter.append("div")
+                .attr("class", "target custom-saved-pill")
+                .attr("title", "Click to select, double-click to rename");
+
+            pill.append("span")
+                .attr("class", "cv-label")
+                .style("cursor", "pointer");
+
+            pill.append("span")
+                .attr("class", "cv-delete")
+                .text("×")
+                .style("cursor", "pointer")
+                .style("opacity", "0.7")
+                .style("font-size", "14px")
+                .style("line-height", "1")
+                .style("margin-left", "6px")
+                .on("click", function() {
+                    d3.event.stopPropagation();
+                    let cv = d3.select(this.parentNode).datum();
+                    if (!cv) return;
+                    let curState = resolveCurrentCustomState();
+                    let wasActive = (activeCustomViewId === cv.id) || (curState.matchingSaved && curState.matchingSaved.id === cv.id);
+
+                    savedCustomViews = savedCustomViews.filter(v => v.id !== cv.id);
+                    if (activeCustomViewId === cv.id) {
+                        activeCustomViewId = null;
+                    }
+                    saveCustomViewsState();
+
+                    // Only reset to default when deleting the currently active custom view
+                    if (wasActive) {
+                        activeCustomViewId = null;
+                        tilt = -1;
+                        boost = 0;
+                        ear = 0;
+                        treble = 0;
+                        updateDispVals();
+                        updateDF(boost, tilt, ear, treble);
+                    } else {
+                        renderTargetsUI();
+                    }
+                });
+
+            pill.on("click", function() {
+                let d3Pill = d3.select(this);
+                if (d3Pill.classed("is-renaming")) return;
+                let cv = d3Pill.datum();
+                if (!cv) return;
                 activeCustomViewId = cv.id;
                 tilt = cv.tilt;
                 boost = cv.boost;
@@ -1058,121 +1224,131 @@ function renderTargetsUI() {
                 treble = cv.treble;
                 updateDispVals();
                 updateDF(boost, tilt, ear, treble);
-                renderTargetsUI();
             });
 
-        let labelSpan = cvPill.append("span")
-            .text(cv.name)
-            .style("cursor", "pointer");
-
-        cvPill.on("dblclick", function() {
-            d3.event.stopPropagation();
-            d3.event.preventDefault();
-            startRename(labelSpan.node(), cv.name, function(newName) {
-                cv.name = newName;
-                if (activeCustomViewId === cv.id || (matchingSaved && matchingSaved.id === cv.id)) {
-                    updateDF(boost, tilt, ear, treble);
-                }
-                renderTargetsUI();
-            });
-        });
-
-        // Small delete button for saved custom presets
-        cvPill.append("span")
-            .text("×")
-            .style("cursor", "pointer")
-            .style("opacity", "0.7")
-            .style("font-size", "14px")
-            .style("line-height", "1")
-            .style("margin-left", "6px")
-            .attr("title", "Delete " + cv.name)
-            .on("click", function() {
+            pill.on("dblclick", function() {
                 d3.event.stopPropagation();
-                savedCustomViews = savedCustomViews.filter(v => v.id !== cv.id);
-                if (activeCustomViewId === cv.id) {
-                    activeCustomViewId = null;
-                }
-                // When deleting the last custom view (savedCustomViews is now empty),
-                // reset preference adjustments back to the standard "10 dB downwards tilt" preset
-                if (savedCustomViews.length === 0) {
-                    activeCustomViewId = null;
-                    tilt = -1;
-                    boost = 0;
-                    ear = 0;
-                    treble = 0;
-                    updateDispVals();
-                    updateDF(boost, tilt, ear, treble);
-                }
-                renderTargetsUI();
+                d3.event.preventDefault();
+                let d3Pill = d3.select(this);
+                if (d3Pill.classed("is-renaming")) return;
+                let cv = d3Pill.datum();
+                if (!cv) return;
+                d3Pill.classed("is-renaming", true);
+                let labelSpan = d3Pill.select("span.cv-label");
+                startRename(labelSpan.node(), cv.name, function(newName) {
+                    d3Pill.classed("is-renaming", false);
+                    cv.name = newName;
+                    saveCustomViewsState();
+                    let curState = resolveCurrentCustomState();
+                    if (activeCustomViewId === cv.id || (curState.matchingSaved && curState.matchingSaved.id === cv.id)) {
+                        updateDF(boost, tilt, ear, treble);
+                    } else {
+                        renderTargetsUI();
+                    }
+                }, function() {
+                    d3Pill.classed("is-renaming", false);
+                    renderTargetsUI();
+                });
             });
+
+            return pill;
+        })
+        .order();
+
+    savedPills.classed("active", cv =>
+        (state.matchingSaved && state.matchingSaved.id === cv.id) || (activeCustomViewId === cv.id && !state.isLiveCustom)
+    );
+    savedPills.each(function(cv) {
+        let d3Pill = d3.select(this);
+        if (!d3Pill.classed("is-renaming")) {
+            d3Pill.select("span.cv-label").text(cv.name);
+        }
+        d3Pill.select("span.cv-delete").attr("title", "Delete " + cv.name);
     });
 
     // 3. Live uncommitted CUSTOM view with + button
-    if (isLiveCustom) {
-        let nextCustomNumber = getNextCustomNumber();
-        let liveCustomDefaultName = "CUSTOM " + nextCustomNumber;
-
-        let liveWrapper = refContainer.append("div")
-            .attr("class", "target active")
-            .attr("title", "Double-click to rename, click + to save");
-
-        let liveLabel = liveWrapper.append("span")
-            .text(liveCustomDefaultName)
-            .style("cursor", "pointer");
-
-        liveWrapper.on("dblclick", function() {
-            d3.event.stopPropagation();
-            d3.event.preventDefault();
-            startRename(liveLabel.node(), liveCustomDefaultName, function(newName) {
-                let newCv = {
-                    id: Date.now(),
-                    name: newName,
-                    tilt: tilt,
-                    boost: boost,
-                    ear: ear,
-                    treble: treble
-                };
-                savedCustomViews.push(newCv);
-                activeCustomViewId = newCv.id;
-                updateDF(boost, tilt, ear, treble);
-                renderTargetsUI();
-            });
-        });
-
-        // The + indicator/button to save as new preset (compact, height 18px so pill height is untouched)
-        let plusBtn = liveWrapper.append("button")
-            .text("+")
-            .style("cursor", "pointer")
-            .style("background", "var(--background-color)")
-            .style("color", "var(--font-color-primary)")
-            .style("border", "1px solid var(--background-color-contrast-more)")
-            .style("border-radius", "3px")
-            .style("margin-left", "6px")
-            .style("padding", "0 5px")
-            .style("height", "18px")
-            .style("font-weight", "bold")
-            .style("font-size", "11px")
-            .style("line-height", "16px")
-            .style("display", "inline-flex")
-            .style("align-items", "center")
-            .style("justify-content", "center")
-            .attr("title", "Save as " + liveCustomDefaultName)
-            .on("click", function() {
-                d3.event.stopPropagation();
-                let newCv = {
-                    id: Date.now(),
-                    name: liveCustomDefaultName,
-                    tilt: tilt,
-                    boost: boost,
-                    ear: ear,
-                    treble: treble
-                };
-                savedCustomViews.push(newCv);
-                activeCustomViewId = newCv.id;
-                updateDF(boost, tilt, ear, treble);
-                renderTargetsUI();
-            });
+    function commitLiveCustomView(chosenName) {
+        let cur = {
+            tilt: roundPresetVal(tilt),
+            boost: roundPresetVal(boost),
+            ear: roundPresetVal(ear),
+            treble: roundPresetVal(treble)
+        };
+        let newCv = {
+            id: Date.now(),
+            name: chosenName || getNextCustomName(),
+            tilt: cur.tilt,
+            boost: cur.boost,
+            ear: cur.ear,
+            treble: cur.treble
+        };
+        customViewCounter += 1;
+        savedCustomViews.push(newCv);
+        activeCustomViewId = newCv.id;
+        saveCustomViewsState();
+        updateDF(boost, tilt, ear, treble);
     }
+
+    let livePills = refContainer.selectAll("div.target.custom-live-pill")
+        .data(state.isLiveCustom ? [liveCustomDefaultName] : [])
+        .join(enter => {
+            let liveWrapper = enter.append("div")
+                .attr("class", "target active custom-live-pill")
+                .attr("title", "Double-click to rename, click + to save");
+
+            liveWrapper.append("span")
+                .attr("class", "cv-live-label")
+                .style("cursor", "pointer");
+
+            liveWrapper.on("dblclick", function() {
+                d3.event.stopPropagation();
+                d3.event.preventDefault();
+                let d3Wrap = d3.select(this);
+                if (d3Wrap.classed("is-renaming")) return;
+                d3Wrap.classed("is-renaming", true);
+                let liveName = getNextCustomName();
+                startRename(d3Wrap.select("span.cv-live-label").node(), liveName, function(newName) {
+                    d3Wrap.classed("is-renaming", false);
+                    commitLiveCustomView(newName);
+                }, function() {
+                    d3Wrap.classed("is-renaming", false);
+                    renderTargetsUI();
+                });
+            });
+
+            liveWrapper.append("button")
+                .attr("class", "cv-save-plus")
+                .text("+")
+                .style("cursor", "pointer")
+                .style("background", "var(--background-color)")
+                .style("color", "var(--font-color-primary)")
+                .style("border", "1px solid var(--background-color-contrast-more)")
+                .style("border-radius", "3px")
+                .style("margin-left", "6px")
+                .style("padding", "0 5px")
+                .style("height", "18px")
+                .style("font-weight", "bold")
+                .style("font-size", "11px")
+                .style("line-height", "16px")
+                .style("display", "inline-flex")
+                .style("align-items", "center")
+                .style("justify-content", "center")
+                .on("click", function() {
+                    d3.event.stopPropagation();
+                    commitLiveCustomView(getNextCustomName());
+                });
+
+            return liveWrapper;
+        })
+        .order();
+
+    livePills.each(function(name) {
+        let d3Wrap = d3.select(this);
+        if (!d3Wrap.classed("is-renaming")) {
+            d3Wrap.select("span.cv-live-label").text(name);
+        }
+        d3Wrap.select("button.cv-save-plus").attr("title", "Save as " + name);
+    });
 }
 // Global in-memory text & parsed data cache for 0ms re-fetches
 const rawFileCache = new Map();
@@ -1785,14 +1961,18 @@ let baseURL;  // Set by setInitPhones
 function addPhonesToUrl() {
     let title = baseTitle,
         url = baseURL,
-        names = activePhones.filter(p => !p.isDynamic && !p.isPrefBounds).map(p => p.fileName),
-        namesCombined = names.join(", ");
+        visibleSharePhones = activePhones.filter(p => !p.isDynamic && !p.isPrefBounds),
+        names = visibleSharePhones.map(p => (p.isTarget && p.phone === "Custom Tilt") ? (default_DF_name + " Target") : p.fileName),
+        namesCombined = visibleSharePhones.map(p => p.fileName).join(", ");
     
     if (names.length) {
         url += "?share=" + encodeURI(names.join().replace(/ /g,"_"));
         title = namesCombined + " - " + title;
     }
-    if (tiltableTargets.some(target => names.includes(target + " Target"))) {
+    let hasTiltableActive = visibleSharePhones.some(p =>
+        p.isTarget && (p.phone === "Custom Tilt" || tiltableTargets.includes(p.dispName))
+    );
+    if (hasTiltableActive) {
         url += "&bass="+boost+"&tilt="+tilt+"&treble="+treble+"&ear="+ear;
     }
     let canLink = targetWindow.document.querySelector("link[rel='canonical']");
@@ -1865,6 +2045,7 @@ function updatePaths(trigger) {
     if (ifURL && !trigger) addPhonesToUrl();
     if (stickyLabels) drawLabels();
     if (typeof window.syncGraphHeader === "function") { window.syncGraphHeader(); }
+    if (typeof window.refreshCalcBadge === "function") { window.refreshCalcBadge(); }
 }
 
 // Preference bounds (loadPrefBounds, setPrefBounds, prepPrefBounds, prefBoundsObj)
@@ -2010,6 +2191,9 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
                 setCurves(ap[0], false, 1);
             }
             activePhones.push(p);
+            if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
+                window.resetGraphTools();
+            }
         } else {
             activePhones.unshift(p);
         }
@@ -2079,6 +2263,9 @@ function removePhone(p) {
         let ap = activePhones.filter(p => !p.isTarget && !p.isPrefBounds);
         if (ap.length === 1) {
             setCurves(ap[0], false, undefined);
+        }
+        if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
+            window.resetGraphTools();
         }
     }
     updatePaths();
@@ -2266,20 +2453,23 @@ Promise.all([
             setModeEmbed();
         }
 
-        if (url.includes(cDFb)) {
-            boost = parseFloat(cTiltParams[1]);
-        }
-
-        if (url.includes(cDFt)) {
-            tilt = parseFloat(cTiltParams[2]);
-        }
-
-        if (url.includes(cDFtr)) {
-            treble = parseFloat(cTiltParams[3]);
-        }
-
-        if (url.includes(cDFe)) {
-            ear = parseFloat(cTiltParams[4]);
+        if (cTiltParams) {
+            if (url.includes(cDFb)) {
+                let parsedBass = parseFloat(cTiltParams[1]);
+                if (Number.isFinite(parsedBass)) boost = parsedBass;
+            }
+            if (url.includes(cDFt)) {
+                let parsedTilt = parseFloat(cTiltParams[2]);
+                if (Number.isFinite(parsedTilt)) tilt = parsedTilt;
+            }
+            if (url.includes(cDFtr)) {
+                let parsedTreb = parseFloat(cTiltParams[3]);
+                if (Number.isFinite(parsedTreb)) treble = parsedTreb;
+            }
+            if (url.includes(cDFe)) {
+                let parsedEar = parseFloat(cTiltParams[4]);
+                if (Number.isFinite(parsedEar)) ear = parsedEar;
+            }
         }
     }
     
@@ -2419,6 +2609,7 @@ Promise.all([
         normalizePhone(df);
         df.offset=df.offset||0;
         dfBase = getBaseline(df);
+        renderTargetsUI();
     });
 
     // update y scaling
@@ -2434,17 +2625,18 @@ Promise.all([
     updateDispVals();
 
     let UnTiltTHIS = doc.select("#cusdf-UnTiltTHIS");
-    // if UnTiltTHIS is clicked, switch df to current active target if exists
+    // if UnTiltTHIS is clicked, clear active custom view and reset adjustments to 0
     UnTiltTHIS.on("click", function () {
+        activeCustomViewId = null;
         boost = 0;
         tilt = 0;
         ear = 0;
         treble = 0;
-        updateDF(boost, tilt, ear, treble);
         updateDispVals();
+        updateDF(boost, tilt, ear, treble);
     });
     
-    updateDF = (boost, tilt, ear, treble, change) => {
+    updateDF = (boostArg, tiltArg, earArg, trebleArg) => {
         // check if user is trying to tilt non tiltable targets
         let activeTarget = activePhones.filter(p => p.isTarget)[0];
         if (activeTarget && activeTarget.isTarget && !tiltableTargets.includes(activeTarget.dispName) && activeTarget.phone != "Custom Tilt") {
@@ -2452,21 +2644,15 @@ Promise.all([
         }
         // Bass Shelf
         let filters = [
-            {disabled: false, type:"LSQ", freq:105, q:0.707, gain:boost},
-            {disabled: false, type:"PK", freq:2750, q:1, gain:ear},
-            {disabled: false, type:"HSQ", freq:2500, q:0.42, gain:treble}
+            {disabled: false, type:"LSQ", freq:105, q:0.707, gain:boostArg},
+            {disabled: false, type:"PK", freq:2750, q:1, gain:earArg},
+            {disabled: false, type:"HSQ", freq:2500, q:0.42, gain:trebleArg}
         ]; 
         let bass = df.rawChannels.map(c => c ? Equalizer.apply(c, filters) : null);
         // Tilt
         let tiltOct = new Array(bass.length).fill(null);
         for(let i = 0; i < bass[0].length; i++) {
-            let gainAdjustment = 0;
-            if (boost == 0) {
-                gainAdjustment = tilt * Math.log2(bass[0][i][0]);
-            } else {
-                // if (bass[0][i][0] >= 200) gainAdjustment = tilt * Math.log2(bass[0][i][0]/200); // stopping tilt at 200hz for bass boost
-                gainAdjustment = tilt * Math.log2(bass[0][i][0]);
-            }
+            let gainAdjustment = tiltArg * Math.log2(bass[0][i][0]);
             let tiltedMagnitude = bass[0][i][1] + gainAdjustment;
             tiltOct[i] = [bass[0][i][0], tiltedMagnitude];
         }
@@ -2474,38 +2660,23 @@ Promise.all([
         let brand = window.brandTarget;
         let phoneObjs = brand.phoneObjs;
         let parts = [];
-        if (tilt   != 0) parts.push("Tilt: " + tilt   + "dB/Oct");
-        if (boost  != 0) parts.push("B: "    + boost  + "dB");
-        if (treble != 0) parts.push("T: "    + treble + "dB");
-        if (ear    != 0) parts.push("3kHz: " + ear    + "dB");
+        if (tiltArg   != 0) parts.push("Tilt: " + tiltArg   + "dB/Oct");
+        if (boostArg  != 0) parts.push("B: "    + boostArg  + "dB");
+        if (trebleArg != 0) parts.push("T: "    + trebleArg + "dB");
+        if (earArg    != 0) parts.push("3kHz: " + earArg    + "dB");
         let preferenceAdjustments = parts.length ? " (" + parts.join(", ") + ")" : " ";
 
         if (harmanFilters) {
             let match = harmanFilters.find(f =>
-                tilt   == f.tilt       && boost == f.bass_shelf &&
-                treble == f.treble     && ear   == f.ear);
+                tiltArg   == f.tilt       && boostArg == f.bass_shelf &&
+                trebleArg == f.treble     && earArg   == f.ear);
             if (match) preferenceAdjustments += ` (${match.name} Filters)`;
         }
 
-        let isDF = (tilt === 0 && boost === 0 && treble === 0 && ear === 0);
-        let isTilt10 = (tilt === -1 && boost === 0 && treble === 0 && ear === 0);
-        let matchingSaved = savedCustomViews.find(cv => cv.tilt === tilt && cv.boost === boost && cv.ear === ear && cv.treble === treble);
-        let activeSaved = activeCustomViewId ? savedCustomViews.find(cv => cv.id === activeCustomViewId) : null;
-        
-        let nextNum = 1;
-        savedCustomViews.forEach(cv => {
-            let m = cv.name.match(/^CUSTOM\s+(\d+)$/i);
-            if (m) {
-                let n = parseInt(m[1], 10);
-                if (n >= nextNum) nextNum = n + 1;
-            }
-        });
-        if (savedCustomViews.length >= nextNum) nextNum = savedCustomViews.length + 1;
-        let liveDefaultName = "CUSTOM " + nextNum;
-
-        let targetPrefix = isDF ? "Fc-Construct DF-HRTF" 
-            : (isTilt10 ? "10 dB downwards tilt" 
-            : (matchingSaved ? matchingSaved.name : (activeSaved ? activeSaved.name : liveDefaultName)));
+        let state = resolveCurrentCustomState();
+        let targetPrefix = state.isPresetDF ? "Fc-Construct DF-HRTF"
+            : (state.isPresetTilt10 ? "10 dB downwards tilt"
+            : (state.matchingSaved ? state.matchingSaved.name : getNextCustomName()));
 
         let phoneObj = { isTarget:true, brand:brand, phone:"Custom Tilt",
             fullName:targetPrefix + preferenceAdjustments,
@@ -2536,31 +2707,27 @@ Promise.all([
             drawLabels();
         }
         renderTargetsUI();
+    };
 
-        // focus cusdf inputs
-        if (change === "bass") {
-            doc.select("#cusdf-bass").node().focus();
-        } else if (change === "tilt") {
-            doc.select("#cusdf-tilt").node().focus();
-        } else if (change === "ear") {
-            doc.select("#cusdf-ear").node().focus();
-        } else if (change === "treble") {
-            doc.select("#cusdf-treb").node().focus();
-        }
+    const COMPLETE_NUMBER_INPUT = /^-?(?:\d+\.?\d*|\.\d+)$/;
+    function bindCusdfInput(selector, setter) {
+        doc.select(selector)
+            .on("change input", function () {
+                let raw = (this.value || "").trim();
+                if (!COMPLETE_NUMBER_INPUT.test(raw)) return;
+                let num = Number(raw);
+                if (!Number.isFinite(num)) return;
+                setter(num);
+                updateDF(boost, tilt, ear, treble);
+            })
+            .on("blur", function () {
+                updateDispVals();
+            });
     }
-
-    const NUMERIC_INPUT = /^-?\d*(\.\d+)?$/;
-    function bindCusdfInput(selector, kind, setter) {
-        doc.select(selector).on("change input", function () {
-            if (!NUMERIC_INPUT.test(this.value)) return;
-            setter(+this.value);
-            updateDF(boost, tilt, ear, treble, kind);
-        });
-    }
-    bindCusdfInput("#cusdf-bass", "bass",   v => boost  = v);
-    bindCusdfInput("#cusdf-tilt", "tilt",   v => tilt   = v);
-    bindCusdfInput("#cusdf-ear",  "ear",    v => ear    = v);
-    bindCusdfInput("#cusdf-treb", "treble", v => treble = v);
+    bindCusdfInput("#cusdf-bass", v => boost  = v);
+    bindCusdfInput("#cusdf-tilt", v => tilt   = v);
+    bindCusdfInput("#cusdf-ear",  v => ear    = v);
+    bindCusdfInput("#cusdf-treb", v => treble = v);
                             
     // Harman Filters button
     if (harmanFilters) {
@@ -2725,51 +2892,106 @@ function pathTooltip(c, m) {
         .attrs({x:b.x-1, y:b.y-1, width:b.width+2, height:b.height+2});
 }
 let interactInspect = false;
-let graphInteract = imm => function () {
-    let cs = d3.merge(activePhones.map(p=>p.hide?[]:p.activeCurves));
-    if (!cs.length) return;
-    let m = d3.mouse(this);
-    if (interactInspect) {
-        let ind = fr_to_ind(x.invert(m[0]));
-        ind = Math.max(0, Math.min(ind, f_values.length - 1));
-        let x1 = x(f_values[ind]),
-            x0 = ind>0 ? x(f_values[ind-1]) : x1,
-            sel= m[0]-x0 < x1-m[0],
-            xv = sel ? x0 : x1;
-        ind -= sel;
-        ind = Math.max(0, Math.min(ind, f_values.length - 1));
-        function initInspector(e) {
-            e.attr("class", "inspector");
-            e.append("line").attrs({ x1: 0, x2: 0, y1: pad.t, y2: pad.t + H });
-            let c = e.append("g").attr("class", "inspectContent").style("filter", "url(#inspect-halo)");
-            c.append("text").attr("class", "insp_dB").attr("x", 2);
-        }
 
-        let insp = getToolsLayer().selectAll(".inspector").data([xv])
-            .join(enter => enter.append("g").call(initInspector))
-            .attr("transform", "translate(" + xv + ",0)");
+function getInspectChannelRank(c) {
+    let ch = c.channel;
+    if (!ch && c.chIdx !== undefined) ch = (c.chIdx === 1 ? "R" : (c.chIdx === 0 ? "L" : null));
+    if (!ch && c.id) {
+        if (/─\s*R|\(\s*R/i.test(c.id)) ch = "R";
+        else if (/-\s*-\s*L|\(\s*L/i.test(c.id)) ch = "L";
+        else if (/\(\s*AVG/i.test(c.id)) ch = "AVG";
+    }
+    if (ch === "R") return 0;
+    if (ch === "L") return 1;
+    if (ch === "AVG") return 2;
+    return 3;
+}
 
-        let content = insp.select(".inspectContent");
-        if (content.empty()) {
-            insp.selectAll("*").remove();
-            initInspector(insp);
-            content = insp.select(".inspectContent");
-        }
+function getOrderedInspectCurves() {
+    let phoneOrder = new Map();
+    activePhones.forEach((p, idx) => phoneOrder.set(p, idx));
 
-        // Reset transform to 0 before measuring
-        content.attr("transform", "translate(0,0)");
+    let targets = [];
+    let models = [];
+    activePhones.forEach(p => {
+        if (!p || p.hide || p.isPrefBounds || !p.activeCurves) return;
+        p.activeCurves.forEach(c => {
+            if (c.isTarget || (c.p && c.p.isTarget)) {
+                targets.push(c);
+            } else {
+                models.push(c);
+            }
+        });
+    });
 
-        let rawFreq = f_values[ind] || 1000;
-        let fmtFreq = rawFreq >= 1000 ? (rawFreq / 1000).toFixed(1) + " kHz" : Math.round(rawFreq) + " Hz";
-        let dB = content.select(".insp_dB").text(fmtFreq);
+    models.sort((a, b) => {
+        let pa = phoneOrder.get(a.p) ?? 9999;
+        let pb = phoneOrder.get(b.p) ?? 9999;
+        if (pa !== pb) return pa - pb;
+        let ra = getInspectChannelRank(a);
+        let rb = getInspectChannelRank(b);
+        if (ra !== rb) return ra - rb;
+        return (a.sIdx || 0) - (b.sIdx || 0);
+    });
 
-        let cy = cs.map(c => {
+    return targets.concat(models);
+}
+
+function renderInspectAt(m, opts) {
+    let freqOnly = !!(opts && opts.freqOnly);
+    let orderedCs = freqOnly ? [] : getOrderedInspectCurves();
+    if (!m || (!freqOnly && !orderedCs.length)) {
+        stopInspect();
+        return;
+    }
+
+    let ind = fr_to_ind(x.invert(m[0]));
+    ind = Math.max(0, Math.min(ind, f_values.length - 1));
+    let x1 = x(f_values[ind]),
+        x0 = ind > 0 ? x(f_values[ind - 1]) : x1,
+        sel = m[0] - x0 < x1 - m[0],
+        xv = sel ? x0 : x1;
+    ind -= sel;
+    ind = Math.max(0, Math.min(ind, f_values.length - 1));
+
+    function initInspector(e) {
+        e.attr("class", "inspector");
+        e.append("line").attrs({ x1: 0, x2: 0, y1: pad.t, y2: pad.t + H });
+        let c = e.append("g").attr("class", "inspectContent").style("filter", "url(#inspect-halo)");
+        c.append("text").attr("class", "insp_dB").attr("x", 2);
+    }
+
+    let insp = getToolsLayer().selectAll(".inspector").data([xv])
+        .join(enter => enter.append("g").call(initInspector))
+        .attr("transform", "translate(" + xv + ",0)");
+    insp.raise();
+
+    let content = insp.select(".inspectContent");
+    if (content.empty()) {
+        insp.selectAll("*").remove();
+        initInspector(insp);
+        content = insp.select(".inspectContent");
+    }
+
+    // Reset transform before measuring bounding box
+    content.attr("transform", "translate(0,0)");
+
+    let rawFreq = f_values[ind] || 1000;
+    let fmtFreq = rawFreq >= 1000 ? (rawFreq / 1000).toFixed(1) + " kHz" : Math.round(rawFreq) + " Hz";
+    let dBText = content.select(".insp_dB").text(fmtFreq);
+
+    if (freqOnly) {
+        content.selectAll(".inspectLabel").remove();
+        let targetY = y((typeof yCenter !== "undefined" ? yCenter : 0) + 14);
+        let upperGridY = Math.max(pad.t + 58, Math.min(pad.t + H - 14, targetY));
+        dBText.attr("y", upperGridY);
+    } else {
+        let entries = orderedCs.map(c => {
             let fn = baseline.fn(c.l);
             let pt = fn && fn[ind];
             let val = pt ? pt[1] + getOffset(c.p) : 0;
-            return [c, val];
+            return { c: c, val: val, curveY: y(val) };
         });
-        cy.sort((d, e) => d[1] - e[1]);
 
         function newTooltip(t) {
             t.attr("class", "inspectLabel");
@@ -2779,10 +3001,10 @@ let graphInteract = imm => function () {
             valG.append("text").attrs({ x: -16, "text-anchor": "start" });
         }
 
-        let tt = content.selectAll(".inspectLabel").data(cy.map(d => d[0]), d => d.id)
-            .join(enter => enter.append("g").call(newTooltip));
+        let tt = content.selectAll(".inspectLabel").data(entries.map(d => d.c), d => d.id)
+            .join(enter => enter.append("g").call(newTooltip))
+            .order();
 
-        // Update text colors and model name
         tt.select(".insp_name")
             .style("fill", d => (d.isTarget || (d.p && d.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(d).toString())
             .text(d => d.id);
@@ -2793,94 +3015,102 @@ let graphInteract = imm => function () {
                 return (parentDatum.isTarget || (parentDatum.p && parentDatum.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(parentDatum).toString();
             });
 
-        // Update dB numbers
-        let start = [];
-        tt.each(function(d, i) {
-            let val = cy[i][1];
+        tt.each(function(_, i) {
+            let val = entries[i].val;
             let s = val < -0.05 ? "-" : "";
             let absVal = Math.abs(val) + 0.05;
             let intPart = s + Math.floor(absVal) + ".";
             let decPart = Math.floor((absVal % 1) * 10);
-            
+
             let valTexts = d3.select(this).select(".insp_val").selectAll("text").nodes();
             if (valTexts.length >= 2) {
                 d3.select(valTexts[0]).text(intPart);
                 d3.select(valTexts[1]).text(decPart);
-                let xOffset = valTexts[0].getBBox().x - 2;
-                start.push(xOffset);
-            } else {
-                start.push(-16);
             }
         });
 
-        // Compute Y stack heights
-        let heights = tt.nodes().map(n => {
-            let b = n.getBBox();
-            return b.height || 14;
-        });
-        let hm = d3.max(heights) || 14,
-            hh = (y.invert(0) - y.invert(hm - 1)) / 2,
-            stack = [];
+        // Unified consistent stacked block layout: frequency header on top, then Reference -> R -> L
+        let rowStep = 15;
+        let headerGap = 16;
+        let rowsSpan = Math.max(0, entries.length - 1) * rowStep;
+        let meanCurveY = entries.length ? d3.mean(entries, e => e.curveY) : (pad.t + H / 2);
+        let desiredHeaderY = meanCurveY - headerGap - rowsSpan / 2;
+        let minHeaderY = pad.t + 14;
+        let maxHeaderY = Math.max(minHeaderY, pad.t + H - 6 - headerGap - rowsSpan);
+        let headerY = Math.max(minHeaderY, Math.min(maxHeaderY, desiredHeaderY));
 
-        cy.map(d => d[1]).forEach(function(h) {
-            let n = 1;
-            let overlap = s => h / n - s.h / s.n <= hh * (s.n + n);
-            let l = stack.length;
-            while (l && overlap(stack[--l])) {
-                let s = stack.pop();
-                h += s.h; n += s.n;
-            }
-            stack.push({ h: h, n: n });
-        });
+        dBText.attr("y", headerY);
+        tt.attr("transform", (_, i) => "translate(0," + (headerY + headerGap + i * rowStep) + ")");
+    }
 
-        let ch = d3.merge(stack.map(s => {
-            let h = s.h / s.n - (s.n - 1) * hh;
-            return d3.range(s.n).map(k => h + k * 2 * hh);
-        }));
-
-        tt.attr("transform", (_, i) => "translate(0," + (y(ch[i]) + 5) + ")");
-        dB.attr("y", y((ch.length ? ch[ch.length - 1] : 0) + 2 * hh) + 1);
-
-        // NOW measure complete rendered bounding box and clamp dx between pad.l and pad.l + W
-        let bbox = content.node() ? content.node().getBBox() : null;
-        let minX = pad.l;
-        let maxX = pad.l + W;
-        let dx = 0;
-        if (bbox && bbox.width > 0) {
-            let leftEdge = xv + bbox.x;
-            let rightEdge = xv + bbox.x + bbox.width;
-            if (leftEdge < minX) {
-                dx = minX - leftEdge;
-            } else if (rightEdge > maxX) {
-                dx = maxX - rightEdge;
-            }
+    // Clamp horizontally inside [pad.l, pad.l + W]
+    let bbox = content.node() ? content.node().getBBox() : null;
+    let minX = pad.l;
+    let maxX = pad.l + W;
+    let dx = 0;
+    if (bbox && bbox.width > 0) {
+        let leftEdge = xv + bbox.x;
+        let rightEdge = xv + bbox.x + bbox.width;
+        if (leftEdge < minX) {
+            dx = minX - leftEdge;
+        } else if (rightEdge > maxX) {
+            dx = maxX - rightEdge;
         }
-        content.attr("transform", "translate(" + dx + ",0)");
-    } else {
-        let d = 30 * W0 / gr.node().getBoundingClientRect().width,
-            sl= range_to_slice([-1,1],s=>m[0]+d*s);
-        let ind = cs
-            .map(c =>
-                sl(baseline.fn(c.l))
-                    .map(p => Math.hypot(x(p[0])-m[0], y(p[1]+getOffset(c.p))-m[1]))
-                    .reduce((a,b)=>Math.min(a,b), d)
-            )
-            .reduce((a,b,i) => b<a[1] ? [i,b] : a, [-1,d])[0];
-        pathHL(ind===-1 ? false : cs[ind], m, imm);
-  
-  };
+    }
+    content.attr("transform", "translate(" + dx + ",0)");
+}
+
+let graphInteract = imm => function () {
+    let m = d3.mouse(gr.node());
+    if (interactInspect) {
+        renderInspectAt(m);
+        return;
+    }
+    let cs = d3.merge(activePhones.map(p => (p.hide || p.isPrefBounds) ? [] : p.activeCurves));
+    if (!cs.length) return;
+    let d = 30 * W0 / gr.node().getBoundingClientRect().width,
+        sl = range_to_slice([-1, 1], s => m[0] + d * s);
+    let ind = cs
+        .map(c =>
+            sl(baseline.fn(c.l))
+                .map(p => Math.hypot(x(p[0]) - m[0], y(p[1] + getOffset(c.p)) - m[1]))
+                .reduce((a, b) => Math.min(a, b), d)
+        )
+        .reduce((a, b, i) => b < a[1] ? [i, b] : a, [-1, d])[0];
+    pathHL(ind === -1 ? false : cs[ind], m, imm);
 };
 
 function stopInspect() { getToolsLayer().selectAll(".inspector").remove(); }
+function deactivateInspect() {
+    interactInspect = false;
+    doc.select("#inspector").classed("selected", false);
+    stopInspect();
+    if (typeof window.syncGraphToolOverlayState === "function") {
+        window.syncGraphToolOverlayState();
+    }
+}
+function resetGraphTools() {
+    deactivateInspect();
+    if (typeof window.deactivateCalc === "function") {
+        window.deactivateCalc();
+    }
+}
+window.renderInspectAt = renderInspectAt;
+window.stopInspect = stopInspect;
+window.deactivateInspect = deactivateInspect;
+window.resetGraphTools = resetGraphTools;
 
 doc.select("#inspector").on("click", function () {
     let btn = d3.select(this);
     interactInspect = !interactInspect;
     btn.classed("selected", interactInspect);
+    if (interactInspect && typeof window.deactivateCalc === "function") {
+        window.deactivateCalc();
+    }
     if (typeof window.syncGraphToolOverlayState === "function") {
         window.syncGraphToolOverlayState();
     }
-    if (!interactInspect) {
+    if (!interactInspect && !(typeof interactCalc !== "undefined" && interactCalc)) {
         stopInspect();
     }
 });
@@ -2888,7 +3118,13 @@ doc.select("#inspector").on("click", function () {
 gr.append("rect")
     .attrs({x:pad.l,y:pad.t,width:W,height:H,opacity:0})
     .on("mousemove", graphInteract())
-    .on("mouseout", ()=>interactInspect?stopInspect():pathHL(false))
+    .on("mouseout", () => {
+        if (interactInspect) {
+            stopInspect();
+        } else if (!(typeof interactCalc !== "undefined" && interactCalc)) {
+            pathHL(false);
+        }
+    })
     .on("click", graphInteract(true));
 
 

@@ -28,25 +28,40 @@
         return raw || (p.fullName || "").trim();
     }
 
-    function buildAutoTitle(phones) {
-        if (!phones || phones.length === 0) return "";
-        let primaryBrand = getPhoneBrand(phones[0]);
-        let primaryBrandLower = primaryBrand.toLowerCase();
+    function buildAutoTitleParts(phones) {
+        if (!phones || phones.length === 0) return [];
+        let prevBrandLower = "";
 
-        let parts = phones.map((p, idx) => {
+        return phones.map((p, idx) => {
             let brand = getPhoneBrand(p);
+            let brandLower = brand.toLowerCase();
             let model = getPhoneModel(p, brand);
-            if (idx === 0) {
-                return brand ? (brand + " " + model).trim() : model;
-            }
-            if (brand && primaryBrandLower && brand.toLowerCase() === primaryBrandLower) {
+            let omitBrand = idx > 0 && brandLower && brandLower === prevBrandLower;
+            prevBrandLower = brandLower;
+            if (omitBrand) {
                 return model;
             }
             return brand ? (brand + " " + model).trim() : model;
         }).filter(Boolean);
+    }
 
+    function buildAutoTitle(phones) {
+        let parts = buildAutoTitleParts(phones);
         if (!parts.length) return "";
-        return parts.join(" vs. ") + " MIRE";
+        return parts.join(" vs. ");
+    }
+
+    function renderAutoTitle(titleEl, parts) {
+        titleEl.textContent = "";
+        parts.forEach((part, idx) => {
+            if (idx > 0) {
+                titleEl.appendChild(document.createTextNode(" vs. "));
+            }
+            let span = document.createElement("span");
+            span.className = "graph-title-token";
+            span.textContent = part;
+            titleEl.appendChild(span);
+        });
     }
 
     function getElements() {
@@ -78,20 +93,20 @@
         if (!hasData) {
             delete titleInput.dataset.userEdited;
             delete subtitleInput.dataset.userEdited;
-            titleInput.value = "";
-            subtitleInput.value = "";
+            titleInput.textContent = "";
+            subtitleInput.textContent = "";
         } else {
-            let autoTitle = buildAutoTitle(visiblePhones);
+            let autoParts = buildAutoTitleParts(visiblePhones);
             if (titleInput.dataset.userEdited !== "true") {
-                titleInput.value = autoTitle;
+                renderAutoTitle(titleInput, autoParts);
             }
             if (subtitleInput.dataset.userEdited !== "true") {
-                subtitleInput.value = DEFAULT_SUBTITLE;
+                subtitleInput.textContent = DEFAULT_SUBTITLE;
             }
         }
 
-        let titleEdited = titleInput.dataset.userEdited === "true" && titleInput.value.trim().length > 0;
-        let subtitleEdited = subtitleInput.dataset.userEdited === "true" && subtitleInput.value.trim().length > 0;
+        let titleEdited = titleInput.dataset.userEdited === "true" && titleInput.textContent.trim().length > 0;
+        let subtitleEdited = subtitleInput.dataset.userEdited === "true" && subtitleInput.textContent.trim().length > 0;
         let showHeader = hasData || titleEdited || subtitleEdited;
 
         if (mainEl) {
@@ -106,8 +121,8 @@
     function getGraphHeaderText() {
         let { titleInput, subtitleInput } = getElements();
         let visiblePhones = getVisibleDataPhones();
-        let title = titleInput ? titleInput.value.trim() : buildAutoTitle(visiblePhones);
-        let subtitle = subtitleInput ? subtitleInput.value.trim() : (visiblePhones.length ? DEFAULT_SUBTITLE : "");
+        let title = titleInput ? titleInput.textContent.replace(/\u00A0/g, " ").trim() : buildAutoTitle(visiblePhones);
+        let subtitle = subtitleInput ? subtitleInput.textContent.replace(/\u00A0/g, " ").trim() : (visiblePhones.length ? DEFAULT_SUBTITLE : "");
         return { title: title, subtitle: subtitle };
     }
 
@@ -115,8 +130,8 @@
         let { titleInput, subtitleInput } = getElements();
         if (!titleInput || !subtitleInput) return;
 
-        titleInput.placeholder = "Graph title";
-        subtitleInput.placeholder = "Graph subtitle";
+        titleInput.setAttribute("placeholder", "Graph title");
+        subtitleInput.setAttribute("placeholder", "Graph subtitle");
 
         titleInput.addEventListener("input", function () {
             titleInput.dataset.userEdited = "true";
@@ -127,7 +142,7 @@
 
         [titleInput, subtitleInput].forEach(input => {
             input.addEventListener("blur", function () {
-                if (getVisibleDataPhones().length === 0 && !input.value.trim()) {
+                if (getVisibleDataPhones().length === 0 && !input.textContent.trim()) {
                     delete input.dataset.userEdited;
                     syncGraphHeader();
                 }

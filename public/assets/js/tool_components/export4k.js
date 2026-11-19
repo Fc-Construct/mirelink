@@ -136,6 +136,78 @@
         return minPx;
     }
 
+    function wrapTextWords(canvasCtx, text, maxWidth) {
+        let words = String(text || "").trim().split(/\s+/).filter(Boolean);
+        if (!words.length) return [];
+        let lines = [];
+        let current = words[0];
+        for (let i = 1; i < words.length; i++) {
+            let candidate = current + " " + words[i];
+            if (canvasCtx.measureText(candidate).width <= maxWidth) {
+                current = candidate;
+            } else {
+                lines.push(current);
+                current = words[i];
+            }
+        }
+        lines.push(current);
+        return lines;
+    }
+
+    function wrapTitleLines(canvasCtx, titleText, maxWidth) {
+        let paragraphs = String(titleText || "").split(/\r?\n/);
+        let allLines = [];
+
+        paragraphs.forEach(para => {
+            let trimmed = para.trim();
+            if (!trimmed) return;
+
+            let segments = trimmed.split(" vs. ").map(s => s.trim()).filter(Boolean);
+            if (segments.length <= 1) {
+                if (canvasCtx.measureText(trimmed).width <= maxWidth) {
+                    allLines.push(trimmed);
+                } else {
+                    allLines.push(...wrapTextWords(canvasCtx, trimmed, maxWidth));
+                }
+                return;
+            }
+
+            let tokens = segments.map((seg, idx) => (idx < segments.length - 1 ? seg + " vs." : seg));
+            let current = "";
+
+            tokens.forEach(tok => {
+                if (!current) {
+                    if (canvasCtx.measureText(tok).width <= maxWidth) {
+                        current = tok;
+                    } else {
+                        let subLines = wrapTextWords(canvasCtx, tok, maxWidth);
+                        allLines.push(...subLines.slice(0, -1));
+                        current = subLines[subLines.length - 1] || "";
+                    }
+                    return;
+                }
+
+                let candidate = current + " " + tok;
+                if (canvasCtx.measureText(candidate).width <= maxWidth) {
+                    current = candidate;
+                } else {
+                    allLines.push(current);
+                    if (canvasCtx.measureText(tok).width <= maxWidth) {
+                        current = tok;
+                    } else {
+                        let subLines = wrapTextWords(canvasCtx, tok, maxWidth);
+                        allLines.push(...subLines.slice(0, -1));
+                        current = subLines[subLines.length - 1] || "";
+                    }
+                }
+            });
+
+            if (current) allLines.push(current);
+        });
+
+        return allLines;
+    }
+
     function compute4KLayout(svgDims) {
         let sideMargin = 160;
         let vertMargin = 90;
@@ -195,20 +267,36 @@
                     ctx.textAlign = "center";
                     ctx.textBaseline = "alphabetic";
 
-                    let titleBaselineY = layout.plotGridTopY + Math.round(32 * layout.scale);
+                    let titleBaselineY = layout.plotGridTopY + Math.round(30 * layout.scale);
+                    let lastTitleBaselineY = titleBaselineY;
 
                     if (titleText) {
-                        let maxTitlePx = Math.round(26.5 * layout.scale);
-                        let minTitlePx = Math.round(14 * layout.scale);
-                        let titleSize = fitFontSize(ctx, titleText, maxTextW, maxTitlePx, minTitlePx, "700", theme.fontFamily);
+                        let maxTitlePx = Math.round(24.8 * layout.scale);
+                        let minTitlePx = Math.round(16 * layout.scale);
+                        let titleSize = maxTitlePx;
+                        let titleLines = [];
+
+                        for (let size = maxTitlePx; size >= minTitlePx; size -= 2) {
+                            ctx.font = "700 " + size + "px " + theme.fontFamily;
+                            titleLines = wrapTitleLines(ctx, titleText, maxTextW);
+                            titleSize = size;
+                            if (titleLines.length <= 2) break;
+                        }
+
                         ctx.font = "700 " + titleSize + "px " + theme.fontFamily;
                         ctx.fillStyle = theme.titleColor;
-                        ctx.fillText(titleText, centerX, titleBaselineY);
+                        let lineStep = Math.round(titleSize * 1.15);
+
+                        titleLines.forEach((line, idx) => {
+                            let y = titleBaselineY + idx * lineStep;
+                            ctx.fillText(line, centerX, y);
+                            lastTitleBaselineY = y;
+                        });
                     }
 
                     if (subtitleText) {
                         let subBaselineY = titleText
-                            ? (titleBaselineY + Math.round(17.5 * layout.scale))
+                            ? (lastTitleBaselineY + Math.round(18 * layout.scale))
                             : titleBaselineY;
                         let maxSubPx = Math.round(12.6 * layout.scale);
                         let minSubPx = Math.round(8.5 * layout.scale);

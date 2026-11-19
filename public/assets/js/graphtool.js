@@ -39,8 +39,8 @@ doc.html(`
         <div class="graph-svg-wrap">
           <svg id="fr-graph" viewBox="0 0 800 434" data-labels-position="`+ labelsPosition +`"></svg>
           <div class="graph-header" id="graph-header">
-            <input type="text" id="graph-title-input" class="graph-header-title" aria-label="Graph title" autocomplete="off" spellcheck="false" />
-            <input type="text" id="graph-subtitle-input" class="graph-header-subtitle" aria-label="Graph subtitle" autocomplete="off" spellcheck="false" />
+            <div contenteditable="true" id="graph-title-input" class="graph-header-title" aria-label="Graph title" spellcheck="false"></div>
+            <div contenteditable="true" id="graph-subtitle-input" class="graph-header-subtitle" aria-label="Graph subtitle" spellcheck="false"></div>
           </div>
         </div>
       </div>
@@ -593,6 +593,7 @@ dB.updatey = function (dom) {
     let getTr = o => o ? "translate(0,"+(y(o)-y(0))+")" : null;
     //clearLabels();
     gpath.selectAll("path").call(redrawLine);
+    if (typeof window.refreshCalcBadge === "function") { window.refreshCalcBadge(); }
 }
 
 // y-axis scaler button
@@ -1865,6 +1866,7 @@ function updatePaths(trigger) {
     if (ifURL && !trigger) addPhonesToUrl();
     if (stickyLabels) drawLabels();
     if (typeof window.syncGraphHeader === "function") { window.syncGraphHeader(); }
+    if (typeof window.refreshCalcBadge === "function") { window.refreshCalcBadge(); }
 }
 
 // Preference bounds (loadPrefBounds, setPrefBounds, prepPrefBounds, prefBoundsObj)
@@ -2010,6 +2012,9 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
                 setCurves(ap[0], false, 1);
             }
             activePhones.push(p);
+            if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
+                window.resetGraphTools();
+            }
         } else {
             activePhones.unshift(p);
         }
@@ -2079,6 +2084,9 @@ function removePhone(p) {
         let ap = activePhones.filter(p => !p.isTarget && !p.isPrefBounds);
         if (ap.length === 1) {
             setCurves(ap[0], false, undefined);
+        }
+        if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
+            window.resetGraphTools();
         }
     }
     updatePaths();
@@ -2725,51 +2733,106 @@ function pathTooltip(c, m) {
         .attrs({x:b.x-1, y:b.y-1, width:b.width+2, height:b.height+2});
 }
 let interactInspect = false;
-let graphInteract = imm => function () {
-    let cs = d3.merge(activePhones.map(p=>p.hide?[]:p.activeCurves));
-    if (!cs.length) return;
-    let m = d3.mouse(this);
-    if (interactInspect) {
-        let ind = fr_to_ind(x.invert(m[0]));
-        ind = Math.max(0, Math.min(ind, f_values.length - 1));
-        let x1 = x(f_values[ind]),
-            x0 = ind>0 ? x(f_values[ind-1]) : x1,
-            sel= m[0]-x0 < x1-m[0],
-            xv = sel ? x0 : x1;
-        ind -= sel;
-        ind = Math.max(0, Math.min(ind, f_values.length - 1));
-        function initInspector(e) {
-            e.attr("class", "inspector");
-            e.append("line").attrs({ x1: 0, x2: 0, y1: pad.t, y2: pad.t + H });
-            let c = e.append("g").attr("class", "inspectContent").style("filter", "url(#inspect-halo)");
-            c.append("text").attr("class", "insp_dB").attr("x", 2);
-        }
 
-        let insp = getToolsLayer().selectAll(".inspector").data([xv])
-            .join(enter => enter.append("g").call(initInspector))
-            .attr("transform", "translate(" + xv + ",0)");
+function getInspectChannelRank(c) {
+    let ch = c.channel;
+    if (!ch && c.chIdx !== undefined) ch = (c.chIdx === 1 ? "R" : (c.chIdx === 0 ? "L" : null));
+    if (!ch && c.id) {
+        if (/─\s*R|\(\s*R/i.test(c.id)) ch = "R";
+        else if (/-\s*-\s*L|\(\s*L/i.test(c.id)) ch = "L";
+        else if (/\(\s*AVG/i.test(c.id)) ch = "AVG";
+    }
+    if (ch === "R") return 0;
+    if (ch === "L") return 1;
+    if (ch === "AVG") return 2;
+    return 3;
+}
 
-        let content = insp.select(".inspectContent");
-        if (content.empty()) {
-            insp.selectAll("*").remove();
-            initInspector(insp);
-            content = insp.select(".inspectContent");
-        }
+function getOrderedInspectCurves() {
+    let phoneOrder = new Map();
+    activePhones.forEach((p, idx) => phoneOrder.set(p, idx));
 
-        // Reset transform to 0 before measuring
-        content.attr("transform", "translate(0,0)");
+    let targets = [];
+    let models = [];
+    activePhones.forEach(p => {
+        if (!p || p.hide || p.isPrefBounds || !p.activeCurves) return;
+        p.activeCurves.forEach(c => {
+            if (c.isTarget || (c.p && c.p.isTarget)) {
+                targets.push(c);
+            } else {
+                models.push(c);
+            }
+        });
+    });
 
-        let rawFreq = f_values[ind] || 1000;
-        let fmtFreq = rawFreq >= 1000 ? (rawFreq / 1000).toFixed(1) + " kHz" : Math.round(rawFreq) + " Hz";
-        let dB = content.select(".insp_dB").text(fmtFreq);
+    models.sort((a, b) => {
+        let pa = phoneOrder.get(a.p) ?? 9999;
+        let pb = phoneOrder.get(b.p) ?? 9999;
+        if (pa !== pb) return pa - pb;
+        let ra = getInspectChannelRank(a);
+        let rb = getInspectChannelRank(b);
+        if (ra !== rb) return ra - rb;
+        return (a.sIdx || 0) - (b.sIdx || 0);
+    });
 
-        let cy = cs.map(c => {
+    return targets.concat(models);
+}
+
+function renderInspectAt(m, opts) {
+    let freqOnly = !!(opts && opts.freqOnly);
+    let orderedCs = freqOnly ? [] : getOrderedInspectCurves();
+    if (!m || (!freqOnly && !orderedCs.length)) {
+        stopInspect();
+        return;
+    }
+
+    let ind = fr_to_ind(x.invert(m[0]));
+    ind = Math.max(0, Math.min(ind, f_values.length - 1));
+    let x1 = x(f_values[ind]),
+        x0 = ind > 0 ? x(f_values[ind - 1]) : x1,
+        sel = m[0] - x0 < x1 - m[0],
+        xv = sel ? x0 : x1;
+    ind -= sel;
+    ind = Math.max(0, Math.min(ind, f_values.length - 1));
+
+    function initInspector(e) {
+        e.attr("class", "inspector");
+        e.append("line").attrs({ x1: 0, x2: 0, y1: pad.t, y2: pad.t + H });
+        let c = e.append("g").attr("class", "inspectContent").style("filter", "url(#inspect-halo)");
+        c.append("text").attr("class", "insp_dB").attr("x", 2);
+    }
+
+    let insp = getToolsLayer().selectAll(".inspector").data([xv])
+        .join(enter => enter.append("g").call(initInspector))
+        .attr("transform", "translate(" + xv + ",0)");
+    insp.raise();
+
+    let content = insp.select(".inspectContent");
+    if (content.empty()) {
+        insp.selectAll("*").remove();
+        initInspector(insp);
+        content = insp.select(".inspectContent");
+    }
+
+    // Reset transform before measuring bounding box
+    content.attr("transform", "translate(0,0)");
+
+    let rawFreq = f_values[ind] || 1000;
+    let fmtFreq = rawFreq >= 1000 ? (rawFreq / 1000).toFixed(1) + " kHz" : Math.round(rawFreq) + " Hz";
+    let dBText = content.select(".insp_dB").text(fmtFreq);
+
+    if (freqOnly) {
+        content.selectAll(".inspectLabel").remove();
+        let targetY = y((typeof yCenter !== "undefined" ? yCenter : 0) + 14);
+        let upperGridY = Math.max(pad.t + 58, Math.min(pad.t + H - 14, targetY));
+        dBText.attr("y", upperGridY);
+    } else {
+        let entries = orderedCs.map(c => {
             let fn = baseline.fn(c.l);
             let pt = fn && fn[ind];
             let val = pt ? pt[1] + getOffset(c.p) : 0;
-            return [c, val];
+            return { c: c, val: val, curveY: y(val) };
         });
-        cy.sort((d, e) => d[1] - e[1]);
 
         function newTooltip(t) {
             t.attr("class", "inspectLabel");
@@ -2779,10 +2842,10 @@ let graphInteract = imm => function () {
             valG.append("text").attrs({ x: -16, "text-anchor": "start" });
         }
 
-        let tt = content.selectAll(".inspectLabel").data(cy.map(d => d[0]), d => d.id)
-            .join(enter => enter.append("g").call(newTooltip));
+        let tt = content.selectAll(".inspectLabel").data(entries.map(d => d.c), d => d.id)
+            .join(enter => enter.append("g").call(newTooltip))
+            .order();
 
-        // Update text colors and model name
         tt.select(".insp_name")
             .style("fill", d => (d.isTarget || (d.p && d.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(d).toString())
             .text(d => d.id);
@@ -2793,94 +2856,102 @@ let graphInteract = imm => function () {
                 return (parentDatum.isTarget || (parentDatum.p && parentDatum.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(parentDatum).toString();
             });
 
-        // Update dB numbers
-        let start = [];
-        tt.each(function(d, i) {
-            let val = cy[i][1];
+        tt.each(function(_, i) {
+            let val = entries[i].val;
             let s = val < -0.05 ? "-" : "";
             let absVal = Math.abs(val) + 0.05;
             let intPart = s + Math.floor(absVal) + ".";
             let decPart = Math.floor((absVal % 1) * 10);
-            
+
             let valTexts = d3.select(this).select(".insp_val").selectAll("text").nodes();
             if (valTexts.length >= 2) {
                 d3.select(valTexts[0]).text(intPart);
                 d3.select(valTexts[1]).text(decPart);
-                let xOffset = valTexts[0].getBBox().x - 2;
-                start.push(xOffset);
-            } else {
-                start.push(-16);
             }
         });
 
-        // Compute Y stack heights
-        let heights = tt.nodes().map(n => {
-            let b = n.getBBox();
-            return b.height || 14;
-        });
-        let hm = d3.max(heights) || 14,
-            hh = (y.invert(0) - y.invert(hm - 1)) / 2,
-            stack = [];
+        // Unified consistent stacked block layout: frequency header on top, then Reference -> R -> L
+        let rowStep = 15;
+        let headerGap = 16;
+        let rowsSpan = Math.max(0, entries.length - 1) * rowStep;
+        let meanCurveY = entries.length ? d3.mean(entries, e => e.curveY) : (pad.t + H / 2);
+        let desiredHeaderY = meanCurveY - headerGap - rowsSpan / 2;
+        let minHeaderY = pad.t + 14;
+        let maxHeaderY = Math.max(minHeaderY, pad.t + H - 6 - headerGap - rowsSpan);
+        let headerY = Math.max(minHeaderY, Math.min(maxHeaderY, desiredHeaderY));
 
-        cy.map(d => d[1]).forEach(function(h) {
-            let n = 1;
-            let overlap = s => h / n - s.h / s.n <= hh * (s.n + n);
-            let l = stack.length;
-            while (l && overlap(stack[--l])) {
-                let s = stack.pop();
-                h += s.h; n += s.n;
-            }
-            stack.push({ h: h, n: n });
-        });
+        dBText.attr("y", headerY);
+        tt.attr("transform", (_, i) => "translate(0," + (headerY + headerGap + i * rowStep) + ")");
+    }
 
-        let ch = d3.merge(stack.map(s => {
-            let h = s.h / s.n - (s.n - 1) * hh;
-            return d3.range(s.n).map(k => h + k * 2 * hh);
-        }));
-
-        tt.attr("transform", (_, i) => "translate(0," + (y(ch[i]) + 5) + ")");
-        dB.attr("y", y((ch.length ? ch[ch.length - 1] : 0) + 2 * hh) + 1);
-
-        // NOW measure complete rendered bounding box and clamp dx between pad.l and pad.l + W
-        let bbox = content.node() ? content.node().getBBox() : null;
-        let minX = pad.l;
-        let maxX = pad.l + W;
-        let dx = 0;
-        if (bbox && bbox.width > 0) {
-            let leftEdge = xv + bbox.x;
-            let rightEdge = xv + bbox.x + bbox.width;
-            if (leftEdge < minX) {
-                dx = minX - leftEdge;
-            } else if (rightEdge > maxX) {
-                dx = maxX - rightEdge;
-            }
+    // Clamp horizontally inside [pad.l, pad.l + W]
+    let bbox = content.node() ? content.node().getBBox() : null;
+    let minX = pad.l;
+    let maxX = pad.l + W;
+    let dx = 0;
+    if (bbox && bbox.width > 0) {
+        let leftEdge = xv + bbox.x;
+        let rightEdge = xv + bbox.x + bbox.width;
+        if (leftEdge < minX) {
+            dx = minX - leftEdge;
+        } else if (rightEdge > maxX) {
+            dx = maxX - rightEdge;
         }
-        content.attr("transform", "translate(" + dx + ",0)");
-    } else {
-        let d = 30 * W0 / gr.node().getBoundingClientRect().width,
-            sl= range_to_slice([-1,1],s=>m[0]+d*s);
-        let ind = cs
-            .map(c =>
-                sl(baseline.fn(c.l))
-                    .map(p => Math.hypot(x(p[0])-m[0], y(p[1]+getOffset(c.p))-m[1]))
-                    .reduce((a,b)=>Math.min(a,b), d)
-            )
-            .reduce((a,b,i) => b<a[1] ? [i,b] : a, [-1,d])[0];
-        pathHL(ind===-1 ? false : cs[ind], m, imm);
-  
-  };
+    }
+    content.attr("transform", "translate(" + dx + ",0)");
+}
+
+let graphInteract = imm => function () {
+    let m = d3.mouse(gr.node());
+    if (interactInspect) {
+        renderInspectAt(m);
+        return;
+    }
+    let cs = d3.merge(activePhones.map(p => (p.hide || p.isPrefBounds) ? [] : p.activeCurves));
+    if (!cs.length) return;
+    let d = 30 * W0 / gr.node().getBoundingClientRect().width,
+        sl = range_to_slice([-1, 1], s => m[0] + d * s);
+    let ind = cs
+        .map(c =>
+            sl(baseline.fn(c.l))
+                .map(p => Math.hypot(x(p[0]) - m[0], y(p[1] + getOffset(c.p)) - m[1]))
+                .reduce((a, b) => Math.min(a, b), d)
+        )
+        .reduce((a, b, i) => b < a[1] ? [i, b] : a, [-1, d])[0];
+    pathHL(ind === -1 ? false : cs[ind], m, imm);
 };
 
 function stopInspect() { getToolsLayer().selectAll(".inspector").remove(); }
+function deactivateInspect() {
+    interactInspect = false;
+    doc.select("#inspector").classed("selected", false);
+    stopInspect();
+    if (typeof window.syncGraphToolOverlayState === "function") {
+        window.syncGraphToolOverlayState();
+    }
+}
+function resetGraphTools() {
+    deactivateInspect();
+    if (typeof window.deactivateCalc === "function") {
+        window.deactivateCalc();
+    }
+}
+window.renderInspectAt = renderInspectAt;
+window.stopInspect = stopInspect;
+window.deactivateInspect = deactivateInspect;
+window.resetGraphTools = resetGraphTools;
 
 doc.select("#inspector").on("click", function () {
     let btn = d3.select(this);
     interactInspect = !interactInspect;
     btn.classed("selected", interactInspect);
+    if (interactInspect && typeof window.deactivateCalc === "function") {
+        window.deactivateCalc();
+    }
     if (typeof window.syncGraphToolOverlayState === "function") {
         window.syncGraphToolOverlayState();
     }
-    if (!interactInspect) {
+    if (!interactInspect && !(typeof interactCalc !== "undefined" && interactCalc)) {
         stopInspect();
     }
 });
@@ -2888,7 +2959,13 @@ doc.select("#inspector").on("click", function () {
 gr.append("rect")
     .attrs({x:pad.l,y:pad.t,width:W,height:H,opacity:0})
     .on("mousemove", graphInteract())
-    .on("mouseout", ()=>interactInspect?stopInspect():pathHL(false))
+    .on("mouseout", () => {
+        if (interactInspect) {
+            stopInspect();
+        } else if (!(typeof interactCalc !== "undefined" && interactCalc)) {
+            pathHL(false);
+        }
+    })
     .on("click", graphInteract(true));
 
 
