@@ -1011,3 +1011,30 @@ div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-add {
     cursor: pointer;
     font-weight: 600;
 }
+
+.graph-notice {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    z-index: 30;
+    max-width: min(360px, 85%);
+    padding: 8px 12px;
+    border-radius: 6px;
+    background-color: var(--inspector-bg);
+    border: 1px solid var(--inspector-border);
+    color: var(--inspector-text);
+    font-family: var(--font-primary);
+    font-size: 12px;
+    line-height: 1.35;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+}
+
+.graph-notice.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+

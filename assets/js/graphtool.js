@@ -1581,8 +1581,13 @@ function loadFiles(p, callback) {
                 callback(channels);
                 resolve(channels);
             });
+        } else if (!p.isTarget && fileInventoryMap.size > 0) {
+            console.warn("Headphone file not found in file_inventory.json: " + p.dispName);
+            callback(null);
+            resolve(null);
+            return;
         } else {
-            // Fallback probe if inventory map is not present
+            // Fallback probe only when file_inventory.json did not load
             const maxSeatings = 10;
             let probes = [];
             LR.forEach(s => {
@@ -2147,7 +2152,12 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
             if (inFlightLoads.has(p.fileName)) {
                 inFlightLoads.get(p.fileName).then(ch => {
                     p.isLoading = false;
-                    if (!ch) return;
+                    if (!ch) {
+                        if (!trigger && !p.isTarget && typeof showGraphNotice === "function") {
+                            showGraphNotice("Measurement files not found: " + p.dispName);
+                        }
+                        return;
+                    }
                     p.rawChannels = ch;
                     if (p.vars) p.vars[p.fileName] = ch;
                     showPhone(p, exclusive, suppressVariant, trigger);
@@ -2160,7 +2170,12 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         p.isLoading = true;
         loadFiles(p, function (ch) {
             p.isLoading = false;
-            if (!ch) return;
+            if (!ch) {
+                if (!trigger && !p.isTarget && typeof showGraphNotice === "function") {
+                    showGraphNotice("Measurement files not found: " + p.dispName);
+                }
+                return;
+            }
             p.rawChannels = ch;
             if (p.vars) p.vars[p.fileName] = ch;
             showPhone(p, exclusive, suppressVariant, trigger);
@@ -2417,9 +2432,31 @@ function asPhoneObj(b, p, isInit, inits) {
     return r;
 }
 
+let graphNoticeTimer = null;
+function showGraphNotice(message) {
+    const container = document.querySelector("div.graph-svg-wrap") || document.querySelector("div.graphBox");
+    if (!container) return;
+    let el = container.querySelector(".graph-notice");
+    if (!el) {
+        el = document.createElement("div");
+        el.className = "graph-notice";
+        container.appendChild(el);
+    }
+    el.textContent = message;
+    el.classList.add("visible");
+    if (graphNoticeTimer) clearTimeout(graphNoticeTimer);
+    graphNoticeTimer = setTimeout(() => {
+        el.classList.remove("visible");
+    }, 5000);
+}
+
+const cacheBustUrl = url => url + (url.includes("?") ? "&" : "?") + "_t=" + Date.now();
+const phoneBookRequestUrl = cacheBustUrl(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK : DIR + "phone_book.json");
+const fileInventoryRequestUrl = cacheBustUrl(typeof FILE_INVENTORY !== "undefined" ? FILE_INVENTORY : DIR + "file_inventory.json");
+
 Promise.all([
-    d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK : DIR+"phone_book.json?"+ new Date().getTime()),
-    d3.json(typeof FILE_INVENTORY !== "undefined" ? FILE_INVENTORY : DIR+"file_inventory.json?"+ new Date().getTime()).catch(() => null)
+    d3.json(phoneBookRequestUrl),
+    d3.json(fileInventoryRequestUrl).catch(() => null)
 ]).then(function ([brands, invData]) {
     if (invData && typeof invData === "object") {
         Object.keys(invData).forEach(k => fileInventoryMap.set(k, invData[k]));
@@ -2487,6 +2524,60 @@ Promise.all([
         initMode = "config";
     }
 
+    if (fileInventoryMap.size > 0) {
+        const missingFromInventory = [];
+        brands = brands.map(b => {
+            const keptPhones = [];
+            (b.phones || []).forEach(p => {
+                if (typeof p === "string") {
+                    if (fileInventoryMap.has(p)) {
+                        keptPhones.push(p);
+                    } else {
+                        missingFromInventory.push(p);
+                    }
+                    return;
+                }
+                const f = p.file || p.name;
+                if (typeof f === "string") {
+                    if (fileInventoryMap.has(f)) {
+                        keptPhones.push(p);
+                    } else {
+                        missingFromInventory.push(f);
+                    }
+                } else if (Array.isArray(f)) {
+                    const hasSuffixes = Array.isArray(p.suffix) && p.suffix.length === f.length;
+                    const keptFiles = [];
+                    const keptSuffixes = [];
+                    f.forEach((fn, idx) => {
+                        if (fileInventoryMap.has(fn)) {
+                            keptFiles.push(fn);
+                            if (hasSuffixes) keptSuffixes.push(p.suffix[idx]);
+                        } else {
+                            missingFromInventory.push(fn);
+                        }
+                    });
+                    if (keptFiles.length > 0) {
+                        const updated = Object.assign({}, p);
+                        if (keptFiles.length === 1 && (!hasSuffixes || keptSuffixes[0] === "")) {
+                            updated.file = keptFiles[0];
+                            delete updated.suffix;
+                        } else {
+                            updated.file = keptFiles;
+                            if (hasSuffixes) updated.suffix = keptSuffixes;
+                        }
+                        keptPhones.push(updated);
+                    }
+                } else {
+                    keptPhones.push(p);
+                }
+            });
+            return Object.assign({}, b, { phones: keptPhones });
+        }).filter(b => b.phones.length > 0);
+        if (missingFromInventory.length > 0) {
+            console.warn("Phonebook entries missing from file_inventory.json (hidden from selector):", missingFromInventory);
+        }
+    }
+
     brands.push({ name: "Uploaded", phones: [] });
     brands.forEach(b => brandMap[b.name] = b);
     brands.forEach(function (b) {
@@ -2498,7 +2589,7 @@ Promise.all([
 
     let allPhones = window.allPhones = d3.merge(brands.map(b=>b.phoneObjs)).filter(p => !p.isTarget),
         currentBrands = [];
-    if (!initReq) inits.push(allPhones[0]);
+    if (!initReq && allPhones.length > 0) inits.push(allPhones[0]);
     startBackgroundPrefetching();
 
     // setClicks hoisted globally
@@ -2579,6 +2670,16 @@ Promise.all([
     }
 
     if (!df) df = window.brandTarget.phoneObjs.find(p => p.dispName === customTiltName);
+    if (loadFromShare && Array.isArray(initReq)) {
+        const resolvedNames = new Set(inits.map(x => x.fileName));
+        const missingShared = initReq.filter(req =>
+            req && !resolvedNames.has(req) && !req.startsWith("CUSTOM")
+        );
+        if (missingShared.length > 0) {
+            console.warn("Shared URL measurement(s) not found:", missingShared);
+            showGraphNotice("Measurement not found: " + missingShared.join(", "));
+        }
+    }
     inits.map(p => p.copyOf ? showVariant(p.copyOf, p, initMode)
                             : showPhone(p,0,1, initMode));
     if (inits.length > 0 && inits[0].brand && !inits[0].isTarget) {

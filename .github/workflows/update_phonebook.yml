@@ -29,7 +29,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/phone_book.json public/data/phone_book.json data/file_inventory.json public/data/file_inventory.json
+          git add data/phone_book.json data/file_inventory.json .phonebook_hashes.json
           if git diff --staged --quiet; then
             echo "No changes to phone_book.json or file_inventory.json"
           else
