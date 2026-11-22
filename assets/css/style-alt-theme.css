@@ -2,8 +2,8 @@
 /* Primary color theme */
 :root {
     color-scheme: light;
-    --accent-color: hsl(0, 0%, 0%);
-    --accent-color-contrast: hsl(0, 0%, 55%);
+    --accent-color: hsl(0, 0%, 28%);
+    --accent-color-contrast: hsl(0, 0%, 50%);
 
     --background-color: hsl(0, 0%, 96%);
     --background-color-contrast: hsl(0, 0%, 90%);
@@ -41,9 +41,13 @@
     --scrollbar-color: 255,255,255;
     --scrollbar-accent: 0,0,0;
     
-    --header-color: hsl(215, 20%, 10%);
-    --header-links-color: hsl(0, 0%, 100%);
-    --header-menu-icon-color: hsl(0, 0%, 100%);
+    --header-color: hsl(0, 0%, 93%);
+    --header-links-color: hsl(0, 0%, 10%);
+    --header-menu-icon-color: hsl(0, 0%, 10%);
+    --header-pill-bg: hsl(0, 0%, 100%);
+    --header-pill-border: hsl(0, 0%, 72%);
+    --header-pill-bg-hover: hsl(0, 0%, 88%);
+    --header-pill-border-hover: hsl(0, 0%, 42%);
     
     --logo-filter: invert(1.0);
     --svg-filter: none;
@@ -93,6 +97,10 @@ body.theme-dark {
     --header-color: hsl(0, 0%, 0%);
     --header-links-color: hsl(0, 0%, 100%);
     --header-menu-icon-color: hsl(0, 0%, 100%);
+    --header-pill-bg: rgba(255, 255, 255, 0.07);
+    --header-pill-border: rgba(255, 255, 255, 0.2);
+    --header-pill-bg-hover: rgba(255, 255, 255, 0.16);
+    --header-pill-border-hover: rgba(255, 255, 255, 0.42);
     
     --logo-filter: invert(1.0);
     --svg-filter: invert(1);
@@ -100,7 +108,7 @@ body.theme-dark {
 
 body.theme-contrast {
     color-scheme: light;
-    --accent-color: hsl(0, 0%, 0%);
+    --accent-color: hsl(0, 0%, 20%);
     --accent-color-contrast: hsl(0, 0%, 0%);
 
     --background-color: hsl(0, 0%, 100%);
@@ -139,9 +147,13 @@ body.theme-contrast {
     --scrollbar-color: 255,255,255;
     --scrollbar-accent: 0,0,0;
     
-    --header-color: hsl(215, 20%, 10%);
-    --header-links-color: hsl(0, 0%, 100%);
-    --header-menu-icon-color: hsl(0, 0%, 100%);
+    --header-color: hsl(0, 0%, 96%);
+    --header-links-color: hsl(0, 0%, 0%);
+    --header-menu-icon-color: hsl(0, 0%, 0%);
+    --header-pill-bg: hsl(0, 0%, 100%);
+    --header-pill-border: hsl(0, 0%, 0%);
+    --header-pill-bg-hover: hsl(0, 0%, 88%);
+    --header-pill-border-hover: hsl(0, 0%, 0%);
     
     --logo-filter: invert(1.0);
     --svg-filter: none;

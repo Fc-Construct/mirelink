@@ -21,6 +21,13 @@ function syncAssets() {
       fs.mkdirSync(path.dirname(publicReadmePath), { recursive: true });
       fs.copyFileSync(readmePath, publicReadmePath);
     }
+
+    const faviconPath = path.resolve(__dirname, 'favicon.ico');
+    const publicFaviconPath = path.resolve(__dirname, 'public/favicon.ico');
+    if (fs.existsSync(faviconPath)) {
+      fs.mkdirSync(path.dirname(publicFaviconPath), { recursive: true });
+      fs.copyFileSync(faviconPath, publicFaviconPath);
+    }
   } catch (e) {
     // Ignore copy errors
   }

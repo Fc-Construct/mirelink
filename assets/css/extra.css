@@ -1038,3 +1038,482 @@ div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-add {
     transform: translateY(0);
 }
 
+/** Brand Socials & Ecosystem Tools (Desktop Header) **/
+div.header-socials {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+div.header-socials a.social-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--header-links-color);
+    opacity: 0.88;
+    background-color: var(--header-pill-bg);
+    border: 1px solid var(--header-pill-border);
+    text-decoration: none;
+    transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+div.header-socials a.social-link:hover {
+    opacity: 1;
+    background-color: var(--header-pill-bg-hover);
+    border-color: var(--header-pill-border-hover);
+}
+
+div.header-socials a.social-link svg {
+    width: 15px;
+    height: 15px;
+    display: block;
+}
+
+div.header-tools-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+}
+
+a.tool-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    box-sizing: border-box;
+    padding: 6px 11px;
+    border-radius: 6px;
+    background-color: var(--header-pill-bg);
+    border: 1px solid var(--header-pill-border);
+    color: var(--header-links-color);
+    font-family: var(--font-primary);
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.25;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+a.tool-pill:hover {
+    background-color: var(--header-pill-bg-hover);
+    border-color: var(--header-pill-border-hover);
+}
+
+a.tool-pill .tool-ext-icon {
+    width: 11px;
+    height: 11px;
+    opacity: 0.72;
+    flex: 0 0 auto;
+}
+
+a.tool-pill:hover .tool-ext-icon {
+    opacity: 1;
+}
+
+/** Mobile Hamburger Drawer Sections **/
+div.drawer-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+div.drawer-section-title {
+    color: var(--font-color-inputs);
+    font-family: var(--font-secondary);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+div.drawer-tools-list,
+div.drawer-socials-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+a.tool-pill.drawer-tool-pill {
+    padding: 8px 12px;
+    background-color: var(--background-color-inputs);
+    border-color: var(--background-color-contrast-more);
+    color: var(--font-color-primary);
+    font-size: 12px;
+}
+
+a.social-link.social-link-labeled {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background-color: var(--background-color-inputs);
+    border: 1px solid var(--background-color-contrast-more);
+    color: var(--font-color-primary);
+    font-family: var(--font-primary);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+a.social-link.social-link-labeled svg {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+}
+
+/** Below-Controls Duplicate Bar (Desktop & Mobile) **/
+div.footer-ecosystem {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px 16px;
+    border-top: 1px solid var(--background-color-contrast);
+    background-color: var(--background-color);
+}
+
+div.footer-ecosystem:empty {
+    display: none;
+}
+
+div.footer-eco-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+span.footer-eco-label {
+    color: var(--font-color-inputs);
+    font-family: var(--font-secondary);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 4px;
+}
+
+a.tool-pill.footer-eco-pill {
+    padding: 4px 9px;
+    background-color: transparent;
+    border: 1px solid var(--background-color-contrast-more);
+    color: var(--font-color-inputs);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+a.tool-pill.footer-eco-pill:hover {
+    color: var(--font-color-primary);
+    border-color: var(--accent-color);
+}
+
+div.footer-eco-socials a.social-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    border: 1px solid var(--background-color-contrast);
+    color: var(--font-color-inputs);
+    background-color: transparent;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+div.footer-eco-socials a.social-link:hover {
+    color: var(--font-color-primary);
+    border-color: var(--background-color-contrast-more);
+}
+
+div.footer-eco-socials a.social-link svg {
+    width: 13px;
+    height: 13px;
+}
+
+/** Reserved Sponsor Slot (Floating over Desktop Sidebar Bottom & Mobile Drawer) **/
+div.controls {
+    position: relative;
+}
+
+div.sidebar-sponsor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    box-sizing: border-box;
+    padding: 0 14px 14px 14px;
+    background: transparent;
+    pointer-events: none;
+}
+
+div.sidebar-sponsor:empty,
+div.mobile-menu-sponsor:empty {
+    display: none;
+}
+
+div.sidebar-sponsor a.sponsor-card,
+div.sidebar-sponsor button.sponsor-dot {
+    pointer-events: auto;
+}
+
+div.sidebar-sponsor a.sponsor-card {
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+
+@media ( min-width: 1001px ) {
+    div.controls:has(div.sidebar-sponsor:not(:empty)) div.scroll {
+        padding-bottom: calc(var(--sponsor-card-height, 152px) + 28px);
+    }
+
+    div.controls:has(div.sidebar-sponsor:not(:empty)) div.select > div.extra-panel {
+        padding-bottom: calc(var(--sponsor-card-height, 152px) + 28px);
+    }
+}
+
+div.mobile-menu-sponsor {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--background-color-contrast);
+}
+
+div.sponsor-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+span.sponsor-disclosure {
+    color: var(--font-color-inputs);
+    font-family: var(--font-secondary);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+}
+
+div.sponsor-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+button.sponsor-dot {
+    width: 7px;
+    height: 7px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--background-color-contrast-more);
+    opacity: 0.45;
+    cursor: pointer;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+button.sponsor-dot:hover {
+    opacity: 0.85;
+}
+
+button.sponsor-dot.is-active {
+    opacity: 1;
+    background-color: var(--accent-color);
+}
+
+a.sponsor-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-sizing: border-box;
+    width: 100%;
+    height: var(--sponsor-card-height, 152px);
+    padding: 14px 16px;
+    overflow: hidden;
+    border-radius: 8px;
+    background-color: var(--background-color-inputs);
+    border: 1px solid var(--background-color-contrast-more);
+    color: var(--font-color-primary);
+    text-align: center;
+    text-decoration: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+a.sponsor-card:hover {
+    border-color: var(--accent-color);
+}
+
+a.sponsor-card.has-image {
+    padding: 0;
+}
+
+div.sponsor-image-frame {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--background-color-inputs);
+}
+
+div.sponsor-ambient-bg {
+    position: absolute;
+    inset: -14px;
+    background-size: cover;
+    background-position: center;
+    filter: blur(18px) saturate(1.15);
+    opacity: 0.28;
+    transform: scale(1.15);
+    pointer-events: none;
+}
+
+img.sponsor-banner-img {
+    position: relative;
+    z-index: 1;
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+div.sponsor-image-frame.sponsor-fit-cover img.sponsor-banner-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+div.sponsor-image-frame.sponsor-fit-contain {
+    padding: 12px;
+    box-sizing: border-box;
+}
+
+span.sponsor-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    background-color: var(--background-color-contrast);
+    border: 1px solid var(--background-color-contrast-more);
+    color: var(--font-color-primary);
+    font-family: var(--font-secondary);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+div.sponsor-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    width: 100%;
+}
+
+span.sponsor-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--font-color-primary);
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+span.sponsor-tagline {
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: var(--font-color-inputs);
+    max-width: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+span.sponsor-cta {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--background-color-contrast-more);
+    background-color: var(--background-color);
+    color: var(--font-color-primary);
+    font-family: var(--font-secondary);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+div.sponsor-banner-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    padding: 16px;
+    box-sizing: border-box;
+    text-align: center;
+    background: linear-gradient(155deg, var(--background-color-inputs) 0%, var(--background-color-contrast) 100%);
+}
+
+a.sponsor-card.sponsor-type-imageBanner:not(.has-image) {
+    padding: 0;
+}
+
+div.sponsor-banner-emblem {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    color: var(--font-color-primary);
+    opacity: 0.9;
+}
+
+div.sponsor-banner-emblem svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+div.sponsor-banner-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+}
+
+span.sponsor-banner-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--font-color-primary);
+    line-height: 1.25;
+}
+
+span.sponsor-banner-sub {
+    font-family: var(--font-secondary);
+    font-size: 10.5px;
+    color: var(--font-color-inputs);
+    line-height: 1.25;
+}
+

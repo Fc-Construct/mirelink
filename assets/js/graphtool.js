@@ -148,6 +148,8 @@ doc.html(`
         </table>
       </div>
 
+      <div class="footer-ecosystem"></div>
+
       <div class="accessories"></div>
 
       <div class="external-links"></div>
@@ -311,6 +313,7 @@ doc.html(`
             </div>
           </div>
         </div>
+        <div class="sidebar-sponsor" id="sidebar-sponsor"></div>
       </div>
     </section>
     <div style="display: none;" class="extra-eq-overlay">AutoEQ is running, it could take 5~20 seconds or more.</div>
@@ -3658,50 +3661,163 @@ function addAccessories() {
 }
 if (accessories) { addAccessories(); }
 
+// Helper: crisp monochrome SVGs for social channels & external tool icon
+function getBrandSocialSvg(id) {
+    switch (id) {
+        case "youtube":
+            return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M23.5 6.2a3.01 3.01 0 0 0-2.12-2.13C19.5 3.56 12 3.56 12 3.56s-7.5 0-9.38.51A3.01 3.01 0 0 0 .5 6.2 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.8 3.01 3.01 0 0 0 2.12 2.13c1.88.51 9.38.51 9.38.51s7.5 0 9.38-.51a3.01 3.01 0 0 0 2.12-2.13A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.26 3.6-6.26 3.6Z"/></svg>`;
+        case "tiktok":
+            return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.3 0 .58.04.85.13V9.01a6.33 6.33 0 0 0-.85-.06A6.34 6.34 0 0 0 3.15 15.3 6.34 6.34 0 0 0 9.49 21.64a6.34 6.34 0 0 0 6.34-6.34V8.73a8.2 8.2 0 0 0 4.78 1.52V6.81a4.85 4.85 0 0 1-1.02-.12Z"/></svg>`;
+        case "instagram":
+            return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.75 2h8.5A5.75 5.75 0 0 1 22 7.75v8.5A5.75 5.75 0 0 1 16.25 22h-8.5A5.75 5.75 0 0 1 2 16.25v-8.5A5.75 5.75 0 0 1 7.75 2Zm0 2A3.75 3.75 0 0 0 4 7.75v8.5A3.75 3.75 0 0 0 7.75 20h8.5A3.75 3.75 0 0 0 20 16.25v-8.5A3.75 3.75 0 0 0 16.25 4h-8.5ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm5.5-2.75a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Z"/></svg>`;
+        default:
+            return "";
+    }
+}
+
+function getExternalArrowSvg() {
+    return `<svg class="tool-ext-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M6.5 3.5H12.5V9.5M12.5 3.5L5.5 10.5"/></svg>`;
+}
+
+function getVisibleSocials() {
+    if (typeof socialLinks === "undefined" || !Array.isArray(socialLinks)) return [];
+    return socialLinks.filter(s => s && !s.hidden && s.url);
+}
+
+function getVisibleTools() {
+    if (typeof ecosystemTools === "undefined" || !Array.isArray(ecosystemTools)) return [];
+    return ecosystemTools.filter(t => t && !t.hidden && t.url);
+}
+
+function buildToolPillElement(tool, extraClass) {
+    const a = document.createElement("a");
+    a.className = "tool-pill" + (extraClass ? " " + extraClass : "");
+    a.href = tool.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.innerHTML = `<span class="tool-pill-label"></span>${getExternalArrowSvg()}`;
+    a.querySelector(".tool-pill-label").textContent = tool.name;
+    return a;
+}
+
+function buildSocialLinkElement(social, showLabel) {
+    const a = document.createElement("a");
+    a.className = "social-link social-link-" + social.id + (showLabel ? " social-link-labeled" : "");
+    a.href = social.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.setAttribute("title", social.name);
+    a.setAttribute("aria-label", social.name);
+    a.innerHTML = getBrandSocialSvg(social.id);
+    if (showLabel) {
+        const span = document.createElement("span");
+        span.textContent = social.name;
+        a.append(span);
+    }
+    return a;
+}
+
 // Add header to alt layout
 function addHeader() {
     let graphToolContainer = document.querySelector("div.graphtool"),
         altHeaderElem = document.createElement("header"),
+        headerTopRow = document.createElement("div"),
         headerButton = document.createElement("button"),
         headerLogoElem = document.createElement("div"),
         headerLogoLink = document.createElement("a"),
         headerLogoImg = document.createElement("img"),
         headerLogoSpan = document.createElement("span"),
+        headerSocials = document.createElement("div"),
+        headerToolsRow = document.createElement("div"),
+        headerDrawer = document.createElement("div"),
         linksList = document.createElement("ul");
-    
+
+    altHeaderElem.className = "header";
+    altHeaderElem.setAttribute("data-links", "collapsed");
+
+    headerTopRow.className = "header-top-row";
     headerButton.className = "header-button";
+    headerButton.setAttribute("type", "button");
+    headerButton.setAttribute("aria-label", "Toggle navigation menu");
+    headerButton.setAttribute("aria-expanded", "false");
+
     headerLogoElem.className = "logo";
-    headerLogoLink.setAttribute('href', site_url);
+    headerLogoLink.setAttribute('href', (typeof headerLogoUrl !== "undefined" && headerLogoUrl) ? headerLogoUrl : site_url);
     headerLogoSpan.innerText = headerLogoText;
     headerLogoLink.append(headerLogoSpan);
     if (headerLogoImgUrl) {
         headerLogoImg.setAttribute("src", headerLogoImgUrl);
         headerLogoLink.append(headerLogoImg);
     }
-    
-    altHeaderElem.append(headerButton);
-    headerButton.setAttribute('style', "background-color: #ffffff");
     headerLogoElem.append(headerLogoLink);
-    altHeaderElem.setAttribute("data-links", "");
-    altHeaderElem.append(headerLogoElem);
 
-    altHeaderElem.className = "header";
-    graphToolContainer.prepend(altHeaderElem);
-    
+    headerSocials.className = "header-socials";
+    headerSocials.setAttribute("aria-label", "Social media");
+    const visibleSocials = getVisibleSocials();
+    visibleSocials.forEach(function(social) {
+        headerSocials.append(buildSocialLinkElement(social, false));
+    });
+
+    headerTopRow.append(headerButton, headerLogoElem, headerSocials);
+    altHeaderElem.append(headerTopRow);
+
+    // Row 2 (desktop): Audio ecosystem tool pills
+    const visibleTools = getVisibleTools();
+    headerToolsRow.className = "header-tools-row";
+    headerToolsRow.setAttribute("aria-label", "Audio tools");
+    visibleTools.forEach(function(tool) {
+        headerToolsRow.append(buildToolPillElement(tool));
+    });
+    if (visibleTools.length > 0) {
+        altHeaderElem.append(headerToolsRow);
+    }
+
+    // Mobile slide-out drawer (Tools + Socials + optional links + Sponsor slot)
+    headerDrawer.className = "header-drawer";
+    headerDrawer.setAttribute("aria-label", "Mobile navigation");
+
+    if (visibleTools.length > 0) {
+        const toolsSection = document.createElement("div");
+        toolsSection.className = "drawer-section";
+        const toolsTitle = document.createElement("div");
+        toolsTitle.className = "drawer-section-title";
+        toolsTitle.textContent = "Audio Tools";
+        const toolsWrap = document.createElement("div");
+        toolsWrap.className = "drawer-tools-list";
+        visibleTools.forEach(function(tool) {
+            toolsWrap.append(buildToolPillElement(tool, "drawer-tool-pill"));
+        });
+        toolsSection.append(toolsTitle, toolsWrap);
+        headerDrawer.append(toolsSection);
+    }
+
+    if (visibleSocials.length > 0) {
+        const socialsSection = document.createElement("div");
+        socialsSection.className = "drawer-section";
+        const socialsTitle = document.createElement("div");
+        socialsTitle.className = "drawer-section-title";
+        socialsTitle.textContent = "Socials";
+        const socialsWrap = document.createElement("div");
+        socialsWrap.className = "drawer-socials-list";
+        visibleSocials.forEach(function(social) {
+            socialsWrap.append(buildSocialLinkElement(social, true));
+        });
+        socialsSection.append(socialsTitle, socialsWrap);
+        headerDrawer.append(socialsSection);
+    }
+
     linksList.className = "header-links";
-    altHeaderElem.append(linksList);
-    
-    if(headerLinks) {
+    if (headerLinks && headerLinks.length > 0) {
         headerLinks.forEach(function(link) {
             let linkContainerElem = document.createElement("li"),
                 linkElem = document.createElement("a");
-            
+
             linkElem.setAttribute("href", link.url);
-            if ( alt_header_new_tab || (link.url && link.url.startsWith("http")) ) {
+            if (alt_header_new_tab || (link.url && link.url.startsWith("http"))) {
                 linkElem.setAttribute("target", "_blank");
                 linkElem.setAttribute("rel", "noopener noreferrer");
             }
-            if ( link.external ) {
+            if (link.external) {
                 linkElem.setAttribute("target", "_blank");
                 linkElem.setAttribute("rel", "noopener noreferrer");
                 linkElem.classList.add('external');
@@ -3709,27 +3825,85 @@ function addHeader() {
             linkElem.textContent = link.name;
             linkContainerElem.append(linkElem);
             linksList.append(linkContainerElem);
-        })
+        });
+        headerDrawer.append(linksList);
     }
 
+    const mobileSponsorMount = document.createElement("div");
+    mobileSponsorMount.className = "mobile-menu-sponsor";
+    mobileSponsorMount.id = "mobile-menu-sponsor";
+    headerDrawer.append(mobileSponsorMount);
+
+    altHeaderElem.append(headerDrawer);
+
     if (allowCreatorSupport && typeof creatorSupportUrl !== "undefined" && creatorSupportUrl) {
-        // Creator support / tip button
         const scriptHtml = `<a href='${creatorSupportUrl}' target='_blank' style="margin-top: auto; margin-bottom: auto; margin-right: 10px"><img height='33' style='border:0px; height:33px;'
                             src='https://storage.ko-fi.com/cdn/kofi5.png?v=3' border='0' alt='Support the Creator' /></a>`;
-        altHeaderElem.insertAdjacentHTML('beforeend', scriptHtml);
+        headerTopRow.insertAdjacentHTML('beforeend', scriptHtml);
     }
-    
+
+    graphToolContainer.prepend(altHeaderElem);
+
+    function setDrawerOpen(open) {
+        altHeaderElem.setAttribute("data-links", open ? "expanded" : "collapsed");
+        headerButton.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
     headerButton.addEventListener("click", function() {
-        let headerLinksState = altHeaderElem.getAttribute("data-links");
-        
-        if (headerLinksState === "expanded") {
-            altHeaderElem.setAttribute("data-links", "collapsed");
-        } else {
-            altHeaderElem.setAttribute("data-links", "expanded");
+        const isExpanded = altHeaderElem.getAttribute("data-links") === "expanded";
+        setDrawerOpen(!isExpanded);
+    });
+
+    headerDrawer.addEventListener("click", function(e) {
+        if (e.target.closest("a")) {
+            setDrawerOpen(false);
+        }
+    });
+
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape" && altHeaderElem.getAttribute("data-links") === "expanded") {
+            setDrawerOpen(false);
         }
     });
 }
 if (alt_layout && alt_header) { addHeader(); }
+
+// Subtle below-controls duplicate of audio tools & social channels
+function addFooterEcosystem() {
+    const container = document.querySelector("div.footer-ecosystem");
+    if (!container) return;
+
+    const visibleTools = getVisibleTools();
+    const visibleSocials = getVisibleSocials();
+    if (visibleTools.length === 0 && visibleSocials.length === 0) return;
+
+    if (visibleTools.length > 0) {
+        const toolsGroup = document.createElement("div");
+        toolsGroup.className = "footer-eco-group";
+        const label = document.createElement("span");
+        label.className = "footer-eco-label";
+        label.textContent = "Tools";
+        toolsGroup.append(label);
+        visibleTools.forEach(function(tool) {
+            toolsGroup.append(buildToolPillElement(tool, "footer-eco-pill"));
+        });
+        container.append(toolsGroup);
+    }
+
+    if (visibleSocials.length > 0) {
+        const socialsGroup = document.createElement("div");
+        socialsGroup.className = "footer-eco-group footer-eco-socials";
+        const label = document.createElement("span");
+        label.className = "footer-eco-label";
+        label.textContent = "Follow";
+        socialsGroup.append(label);
+        visibleSocials.forEach(function(social) {
+            socialsGroup.append(buildSocialLinkElement(social, false));
+        });
+        container.append(socialsGroup);
+    }
+}
+addFooterEcosystem();
 
 // Add external links to bar at bottom of page, if configured
 function addExternalLinks() {

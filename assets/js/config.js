@@ -66,7 +66,7 @@ const preference_bounds_name = "Bounds",
       compTargets = ["Fc-Construct DF-HRTF", "10 dB downwards tilt"],                       // Targets allowed to be compensated
       allowCreatorSupport = false,                  // Creator support button in header
       creatorSupportUrl = "",                       // Creator support link (e.g. Ko-fi, Patreon)
-      sponsorshipsEnabled = false,                  // Third-party sponsorship popup and banner framework (disabled)
+      sponsorshipsEnabled = false,                  // Legacy Squiglink network popup script (keep false for 1P-only sponsors)
       shoplinksEnabled = false,                     // Automated shop/affiliate links framework (disabled)
       graphAggregatorEnabled = false;               // Cross-database search aggregator (disabled by default)
 
@@ -146,15 +146,111 @@ const linkSets = [
     }
 ];
 
-// Header branding
+// Header branding & optional extra text nav links
 let headerLogoText = "Fc-Construct",
+    headerLogoUrl = "https://fc-construct.github.io/mirelink/",
     headerLogoImgUrl = "",
-    headerLinks = [
+    headerLinks = [];
+
+// Social media accounts (rendered in top-left header, mobile drawer, and below-controls strip)
+const socialLinks = [
+    {
+        id: "youtube",
+        name: "YouTube",
+        url: "https://www.youtube.com/channel/UCPY9gXKSlBKqYKOxmcaMrDA",
+        hidden: false
+    },
+    {
+        id: "tiktok",
+        name: "TikTok",
+        url: "https://www.tiktok.com/@fcconstruct",
+        hidden: false
+    },
+    {
+        id: "instagram",
+        name: "Instagram",
+        url: "https://www.instagram.com/fc_construct/",
+        hidden: false
+    }
+];
+
+// Audio ecosystem tools (dynamic pill list — set hidden: false or add objects to reveal more)
+const ecosystemTools = [
+    {
+        id: "imaging-lab",
+        name: "Gaming Imaging Test Lab",
+        url: "https://imaging-lab.xyz/",
+        hidden: false
+    },
+    {
+        id: "review-tool",
+        name: "Review Tool",
+        url: "https://soundcheck-review.vercel.app/",
+        hidden: false
+    },
+    {
+        id: "upcoming-tool",
+        name: "Upcoming Audio Tool",
+        url: "#",
+        hidden: true
+    }
+];
+
+
+const sponsorConfig = {
+    enabled: false,            // MASTER FEATURE FLAG (false = all ads hidden)
+    showHeaderMeta: false,     // Keep false for a clean card without label/dots above it
+    disclosureLabel: "Sponsor",
+    cardHeight: 152,           // Constant block height in px for desktop sidebar card
+    defaultFitMode: "ambient", // "ambient" (fills gaps softly) | "contain" | "cover"
+    placements: {
+        desktopSidebar: true,  // Bottom of left brands/models sidebar
+        mobileMenu: true       // Inside expanded mobile hamburger menu
+    },
+    allowedTypes: {
+        productSpotlight: true, // Emblem/product image + promo text + CTA
+        brandLogo: true,        // Centered partner brand emblem
+        imageBanner: true       // Clickable image/banner inside fixed block
+    },
+    rotation: {
+        enabled: true,
+        intervalMs: 8000,
+        shuffleOnLoad: false
+    },
+    items: [
         {
-            name: "Reviews",
-            url: "https://www.youtube.com/channel/UCPY9gXKSlBKqYKOxmcaMrDA"
+            id: "sample-image-banner",
+            type: "imageBanner",
+            name: "Partner Showcase",
+            alt: "Sample Partner Banner",
+            tagline: "Adaptive 320×152 sponsor slot",
+            url: "https://headphones.com/",
+            imageUrl: "", // Optional image URL/path; adaptive fill handles any image ratio
+            fitMode: "ambient",
+            bgColor: "",
+            hidden: false
+        },
+        {
+            id: "sample-spotlight",
+            type: "productSpotlight",
+            name: "Partner Audio (Sample)",
+            tagline: "Featured headphone spotlight placeholder",
+            ctaText: "Learn More",
+            url: "https://headphones.com/",
+            badgeText: "PA",
+            hidden: false
+        },
+        {
+            id: "sample-brand-logo",
+            type: "brandLogo",
+            name: "Acoustic Lab",
+            tagline: "Audio Partner",
+            url: "https://headphones.com/",
+            badgeText: "AL",
+            hidden: false
         }
-    ];
+    ]
+};
 
 // Tutorial guide spectrum definitions
 let tutorialDefinitions = [
@@ -184,14 +280,19 @@ let tutorialDefinitions = [
         description: 'Ear Canal Gain region (2-4 kHz). In MIRE measurements, pre-compensated for open-canal HRTF baseline.'
     },
     {
-        name: 'Presence',
+        name: 'Lower Treble',
         width: '5.9%',
         description: 'Definition & Articulation (4-6 kHz). Adds attack to percussion and crisp consonant definition.'
     },
     {
-        name: 'Treble & Air',
-        width: '17.4%',
-        description: 'Harmonics, Sparkle, & Air (6-20 kHz). Cymbals, micro-detail, and room reverberation.'
+        name: 'Mid Treble',
+        width: '7.4%',
+        description: 'Detail & Sibilance Region (6-10 kHz). Governs cymbal attack, brass sheen, and consonant energy.'
+    },
+    {
+        name: 'Upper Treble/Air',
+        width: '10%',
+        description: 'Air & Spatial Extension (10 kHz+). Upper harmonics, shimmer, and room reverberation.'
     }
 ];
 
