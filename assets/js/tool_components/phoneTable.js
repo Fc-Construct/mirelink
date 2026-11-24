@@ -613,6 +613,9 @@ function updateVariant(p) {
     chTd.call(addChannelControls);
     normalizePhone(p);
     updatePaths();
+    if (typeof extraEnabled !== "undefined" && extraEnabled && typeof extraEQEnabled !== "undefined" && extraEQEnabled && typeof window.updateEQPhoneSelect === "function") {
+        window.updateEQPhoneSelect();
+    }
 }
 function changeVariant(p, update, trigger) {
     let fn = p.fileName,
@@ -801,6 +804,9 @@ function makeColorPicker(elt) {
 
 function colorPhones() {
     updatePaths();
+    if (typeof window.redrawEQOverlay === "function") {
+        window.redrawEQOverlay();
+    }
     let c = p=>p.active?getDivColor(p.id,true,p.hexColor):null;
     doc.select("#phones").selectAll("div.phone-item")
         .style("border-color",c);

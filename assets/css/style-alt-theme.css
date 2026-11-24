@@ -51,6 +51,15 @@
     
     --logo-filter: invert(1.0);
     --svg-filter: none;
+
+    --eq-overlay-color: #d97706;
+    --eq-overlay-fill: rgba(217, 119, 6, 0.09);
+    --eq-overlay-ref: rgba(217, 119, 6, 0.34);
+    --fft-fill: rgba(2, 132, 199, 0.16);
+    --fft-stroke: rgba(2, 132, 199, 0.42);
+    --fft-pre-fill: rgba(100, 116, 139, 0.16);
+    --fft-pre-stroke: rgba(100, 116, 139, 0.45);
+    --fft-peak-stroke: rgba(217, 119, 6, 0.78);
 }
 
 body.theme-dark {
@@ -104,6 +113,15 @@ body.theme-dark {
     
     --logo-filter: invert(1.0);
     --svg-filter: invert(1);
+
+    --eq-overlay-color: #f59e0b;
+    --eq-overlay-fill: rgba(245, 158, 11, 0.11);
+    --eq-overlay-ref: rgba(245, 158, 11, 0.34);
+    --fft-fill: rgba(56, 189, 248, 0.18);
+    --fft-stroke: rgba(56, 189, 248, 0.46);
+    --fft-pre-fill: rgba(161, 161, 170, 0.16);
+    --fft-pre-stroke: rgba(161, 161, 170, 0.48);
+    --fft-peak-stroke: rgba(250, 204, 21, 0.78);
 }
 
 body.theme-contrast {
@@ -157,6 +175,15 @@ body.theme-contrast {
     
     --logo-filter: invert(1.0);
     --svg-filter: none;
+
+    --eq-overlay-color: #b45309;
+    --eq-overlay-fill: rgba(180, 83, 9, 0.10);
+    --eq-overlay-ref: rgba(180, 83, 9, 0.42);
+    --fft-fill: rgba(3, 105, 161, 0.16);
+    --fft-stroke: rgba(3, 105, 161, 0.5);
+    --fft-pre-fill: rgba(63, 63, 70, 0.16);
+    --fft-pre-stroke: rgba(63, 63, 70, 0.55);
+    --fft-peak-stroke: rgba(180, 83, 9, 0.85);
 }
 
 /***** Squiglink site address *****/

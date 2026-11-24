@@ -303,6 +303,56 @@ div.customDF>button.selected,
   text-align: center;
 }
 
+/** FFT Spectrum Canvas Backdrop & Pure EQ Overlay **/
+
+canvas#fft-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+g.eq-overlay-layer line.eq-overlay-ref {
+  stroke: var(--eq-overlay-ref);
+  stroke-width: 1px;
+  stroke-dasharray: 2, 4;
+}
+
+g.eq-overlay-layer line.eq-overlay-ref.is-bypassed {
+  opacity: 0.35;
+}
+
+g.eq-overlay-layer path.eq-overlay-area {
+  fill: var(--eq-overlay-fill);
+  stroke: none;
+}
+
+g.eq-overlay-layer path.eq-overlay-area.is-bypassed {
+  opacity: 0.22;
+}
+
+g.eq-overlay-layer path.eq-overlay-line {
+  fill: none;
+  stroke: var(--eq-overlay-color);
+  stroke-width: 2.1px;
+  stroke-dasharray: 5, 3;
+  opacity: 0.92;
+  transition: opacity 150ms ease;
+}
+
+g.eq-overlay-layer path.eq-overlay-line.is-bypassed {
+  opacity: 0.28;
+  stroke-width: 1.5px;
+  stroke-dasharray: 3, 4;
+}
+
+g.eq-overlay-layer path.eq-overlay-line.is-flat {
+  opacity: 0.4;
+  stroke-width: 1.25px;
+}
+
 /** extra panel **/
 
 div.extra-panel {
@@ -316,11 +366,18 @@ div.extra-panel > div {
 
 div.extra-panel h5 {
   margin: 0 0 1em 0;
-  color: var(--accent-color-contrast);
+  color: var(--font-color-primary);
 }
 
 div.extra-panel span {
-  color: var(--background-color-contrast-more);
+  color: var(--font-color-inputs);
+}
+
+div.extra-panel div.preamp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0 6px 0;
 }
 
 div.extra-panel > div.extra-eq > div.select-eq-phone,
@@ -407,7 +464,7 @@ div.extra-panel div.settings-row > span > input[type="checkbox"]:checked::before
 }
 
 div.extra-panel > div.extra-eq > div.filters > div.filter > span > select,
-div.extra-eq > div.eq-demo > select {
+div.extra-eq div.eq-demo-header > select.eq-track {
   width: 70%;
   z-index: 1;
   outline: none;
@@ -436,7 +493,7 @@ div.extra-panel div.settings-row > span > input:not([type='checkbox']) {
   border: 1px solid var(--background-color-contrast-more);
   border-radius: 0.25em;
   padding: 0.3em 0.5em;
-  color: var(--accent-color-contrast);
+  color: var(--font-color-primary);
   background-color: var(--background-color-graph) !important;
 }
 
@@ -505,10 +562,20 @@ span:has(input[name="vol-right"]):after {
     content: 'dB';
 }
 
+div.extra-panel span:has(input[name="freq"]):after,
+div.extra-panel span:has(input[name="gain"]):after,
+div.extra-panel span:has(input[name="tone-generator-from"]):after,
+div.extra-panel span:has(input[name="tone-generator-to"]):after,
+div.extra-panel span:has(input[name="vol-left"]):after,
+div.extra-panel span:has(input[name="vol-right"]):after {
+  color: var(--font-color-inputs);
+}
+
 div.extra-panel div.settings-row,
 div.extra-panel div.auto-eq-button,
 div.extra-panel div.filters-button,
-div.extra-panel div.extra-upload-buttons {
+div.extra-panel div.extra-upload-buttons,
+div.extra-panel div.overlay-controls {
   width: 100%;
   margin: 4px 0 0 0;
   box-sizing: border-box;
@@ -516,14 +583,263 @@ div.extra-panel div.extra-upload-buttons {
   gap: 7px;
 }
 
+div.extra-panel div.filters-button {
+  flex-wrap: wrap;
+}
+
 div.extra-panel h3,
 div.extra-panel h4 {
-  color: var(--font-color-inputs);
+  color: var(--font-color-primary);
   margin-bottom: 4px;
 }
 
+div.extra-panel div.eq-title-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 6px 0;
+}
+
+div.extra-panel button.eq-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  margin: 0 !important;
+  flex: 0 0 auto;
+  border: none !important;
+  background: transparent !important;
+  color: var(--font-color-inputs);
+  font-family: var(--font-primary);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1;
+  opacity: 0.78;
+  cursor: pointer;
+}
+
+div.extra-panel button.eq-info-btn:hover,
+div.extra-panel button.eq-info-btn[aria-expanded="true"] {
+  opacity: 1;
+  color: var(--accent-color);
+}
+
+div.extra-panel div.eq-info-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 7px;
+  border: 1px solid var(--background-color-contrast-more);
+  background-color: var(--background-color-inputs);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.42);
+  color: var(--font-color-inputs);
+  font-size: 11px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+div.extra-panel div.eq-info-popover.hidden {
+  display: none;
+}
+
+div.extra-panel div.eq-info-popover p {
+  margin: 0;
+}
+
+div.extra-panel div.eq-info-popover strong {
+  color: var(--font-color-primary);
+}
+
+div.extra-panel div.preamp-row {
+  margin: 2px 0 6px 0;
+}
+
+div.extra-panel #preamp-disp {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+div.extra-panel div.eq-scope-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px 0;
+}
+
+div.extra-panel div.eq-scope-row span.eq-scope-label {
+  font-size: 11px;
+  color: var(--font-color-inputs);
+  white-space: nowrap;
+}
+
+div.extra-panel div.eq-scope-pills {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+}
+
+div.extra-panel div.eq-scope-pills > button.eq-scope-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.5em 0.35em;
+  font-size: 11px;
+  margin-bottom: 0 !important;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+div.extra-panel div.eq-scope-pills > button.eq-scope-btn .scope-dot {
+  display: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--eq-overlay-color, #dc2626);
+  flex: 0 0 auto;
+}
+
+div.extra-panel div.eq-scope-pills > button.eq-scope-btn.has-active .scope-dot {
+  display: inline-block;
+}
+
 div.extra-panel div.extra-upload-buttons > button {
-  width: 33.3%;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.65em 0.45em;
+}
+
+div.extra-panel div.overlay-controls {
+  gap: 5px;
+}
+
+div.extra-panel div.overlay-controls > button {
+  flex: 0.9 1 auto;
+  min-width: 0;
+  padding: 0.65em 0.4em;
+  white-space: nowrap;
+}
+
+div.extra-panel div.overlay-controls > div.fft-split-btn {
+  flex: 1.4 0 auto;
+  min-width: max-content;
+  display: flex;
+  margin-bottom: 4px;
+}
+
+div.extra-panel div.fft-split-btn > button {
+  margin-bottom: 0 !important;
+  padding: 0.65em 0.45em;
+}
+
+div.extra-panel div.fft-split-btn > button.toggle-fft {
+  flex: 1 0 auto;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right-width: 0;
+  white-space: nowrap;
+  padding-left: 0.55em;
+  padding-right: 0.5em;
+}
+
+div.extra-panel div.fft-split-btn > button.toggle-fft-drawer {
+  flex: 0 0 20px;
+  padding: 0.65em 0.1em;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+div.extra-panel div.fft-split-btn > button.toggle-fft.selected + button.toggle-fft-drawer {
+  border-left: 1px solid rgba(128, 128, 128, 0.35) !important;
+}
+
+div.extra-panel div.fft-split-btn > button.toggle-fft-drawer[aria-expanded="true"] .fft-chevron {
+  transform: rotate(180deg);
+}
+
+div.extra-panel .fft-chevron {
+  display: inline-block;
+  transition: transform 140ms ease;
+}
+
+div.extra-panel button.selected {
+  background-color: var(--accent-color) !important;
+  border-color: var(--accent-color) !important;
+  color: var(--font-color-secondary) !important;
+  font-weight: 600;
+}
+
+div.extra-panel div.overlay-controls button.selected {
+  font-weight: 400;
+}
+
+div.extra-panel button.disable-filters.selected {
+  background-color: #b45309 !important;
+  border-color: #d97706 !important;
+  color: #ffffff !important;
+}
+
+div.extra-panel div.fft-drawer {
+  margin: 2px 0 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--background-color-contrast-more);
+  border-radius: 6px;
+  background-color: var(--background-color);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+div.extra-panel div.fft-drawer.hidden {
+  display: none;
+}
+
+div.extra-panel div.fft-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+}
+
+div.extra-panel div.fft-mode-row span.fft-mode-label {
+  font-size: 11px;
+  color: var(--font-color-inputs);
+  white-space: nowrap;
+  min-width: 44px;
+}
+
+div.extra-panel div.fft-mode-pills {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+}
+
+div.extra-panel div.fft-mode-pills > button.fft-mode,
+div.extra-panel div.fft-mode-pills > button.fft-speed,
+div.extra-panel div.fft-mode-pills > button.fft-style {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.45em 0.35em;
+  font-size: 11px;
+  margin-bottom: 0 !important;
 }
 
 div.extra-panel div.settings-row > span {
@@ -552,13 +868,14 @@ div.extra-panel div.settings-row.smooth-row > span:not([name="title"]) {
 }
 
 div.extra-panel div.filters-button > span[class="eqopts"] {
-  width: 25%;
+  flex: 1 1 calc(20% - 6px);
+  min-width: 62px;
   display: inline-block;
 }
 
 div.extra-panel div.filters-button > span[class="eqopts"] > button {
   width: 100%;
-  padding: 0.7em;
+  padding: 0.7em 0.35em;
 }
 
 div.extra-panel div.filters-button > span[class="eqopts"] > button.add-filter,
@@ -594,17 +911,40 @@ div.extra-panel button {
   margin-bottom: 4px !important;
 }
 
-div.extra-eq > div.eq-demo {
-  margin: 0px 0 6px 0; 
+div.extra-eq > div.eq-demo-header {
   display: flex;
-  box-sizing: border-box;
-  gap: 7px;
-  width: 100%;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 6px 0;
 }
 
-div.extra-eq > div.eq-demo > select {
-  width: 25% !important;
+div.extra-eq > div.eq-demo-header > h4 {
+  margin: 0;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+div.extra-eq > div.eq-demo-header > select.eq-track {
+  width: auto;
+  min-width: 88px;
+  max-width: 195px;
+  flex: 0 1 auto;
+  margin-top: 0;
+  padding: 0.25em 1.7em 0.25em 0.55em;
+  background-position: right 0.55em top 50%, 0 0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+div.extra-eq > div.eq-demo {
+  margin: 0px 0 8px 0; 
+  display: flex;
+  box-sizing: border-box;
+  gap: 8px;
+  width: 100%;
+  align-items: center;
 }
 
 div.extra-eq > div.eq-demo > button {
@@ -616,10 +956,21 @@ div.extra-eq > div.eq-demo > span {
   text-align: center;
 }
 
+div.extra-eq > div.eq-demo > #songTime {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+div.extra-eq > div.eq-demo > input[name="demo-time"] {
+  flex: 1 1 auto;
+  width: auto !important;
+  min-width: 80px;
+}
+
 div.extra-eq > div.eq-demo > input[name="demo-time"],
 div.extra-eq > div.eq-demo > input[name="tone-generator-freq"],
 div.settings-row > input[name="balance-vol"] {
-  width: 60% !important;
+  width: 60%;
   margin: 0;
   border: 1px solid var(--background-color-contrast-more);
   border-radius: 1em;
@@ -648,43 +999,88 @@ div.extra-panel div.filters-button > button[class="pink-noise selected"] {
 
 .volume-button {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
 }
 
-.volume-button:hover .volume-slider {
-  display: block;
+.volume-button:hover .volume-slider,
+.volume-button:focus-within .volume-slider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .volume-slider {
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 4px);
   left: 50%;
   transform: translateX(-50%);
+  z-index: 40;
   display: none;
-  width: 100px;
-  background-color: transparent;
-  border: transparent;
-  padding: 5px;
-  border-radius: 5px;
+  width: 28px;
+  height: 94px;
+  background-color: var(--background-color-inputs);
+  border: 1px solid var(--background-color-contrast-more);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.34);
+  padding: 0;
+  border-radius: 7px;
   color: #fff;
   accent-color: var(--accent-color-contrast);
 }
 
+.volume-slider::after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 100%;
+  height: 8px;
+}
+
 .volume-slider input[type="range"] {
-  width: 100%;
-  background: var(--background-color-graph);
-  border: 1px solid var(--background-color-contrast-more);
-  border-radius: 1em;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 76px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
   outline: none;
+  cursor: pointer;
+  transform: rotate(-90deg);
+}
+
+.volume-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--background-color-contrast-more);
 }
 
 .volume-slider input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 15px;
-  height: 15px;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
   background: var(--accent-color-contrast);
+  border: 1px solid var(--background-color);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.volume-slider input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--background-color-contrast-more);
+}
+
+.volume-slider input[type="range"]::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  background: var(--accent-color-contrast);
+  border: 1px solid var(--background-color);
   border-radius: 50%;
   cursor: pointer;
 }
@@ -1168,7 +1564,7 @@ a.social-link.social-link-labeled svg {
     flex: 0 0 auto;
 }
 
-/** Below-Controls Duplicate Bar (Desktop & Mobile) **/
+/** Below-Controls Duplicate Bar & Unified Desktop Footer Row **/
 div.footer-ecosystem {
     display: flex;
     flex-wrap: wrap;
@@ -1237,6 +1633,92 @@ div.footer-eco-socials a.social-link:hover {
 div.footer-eco-socials a.social-link svg {
     width: 13px;
     height: 13px;
+}
+
+@media ( min-width: 1001px ) {
+    div.footer-meta-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 28px;
+        box-sizing: border-box;
+        width: 100%;
+        padding: 14px 18px;
+        border-top: 1px solid var(--background-color-contrast);
+        background-color: var(--background-color);
+    }
+
+    div.footer-meta-row > div.footer-ecosystem {
+        flex: 0 0 auto;
+        width: auto;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 8px;
+        padding: 0;
+        border-top: none;
+        background-color: transparent;
+    }
+
+    div.footer-meta-row span.footer-eco-label {
+        font-size: 10.5px;
+        min-width: 44px;
+        margin-right: 2px;
+    }
+
+    div.footer-meta-row a.tool-pill.footer-eco-pill {
+        padding: 6px 11px;
+        font-size: 12px;
+    }
+
+    div.footer-meta-row div.footer-eco-socials a.social-link {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+    }
+
+    div.footer-meta-row div.footer-eco-socials a.social-link svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    div.footer-meta-row > div.accessories {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        justify-content: center;
+        padding: 0 16px 0 28px;
+        border-top: none;
+        background-color: transparent;
+    }
+
+    div.footer-meta-row > div.accessories aside {
+        max-width: 640px;
+        margin: 0;
+    }
+
+    div.footer-meta-row > div.accessories p,
+    div.footer-meta-row > div.accessories p.center {
+        width: auto;
+        max-width: 100%;
+        margin: 0;
+        font-size: 13.5px;
+        line-height: 1.5;
+        text-align: center;
+    }
+}
+
+@media ( max-width: 1000px ) {
+    div.footer-meta-row > div.accessories {
+        padding: 12px 0;
+    }
+
+    div.footer-meta-row > div.accessories p,
+    div.footer-meta-row > div.accessories p.center {
+        font-size: 12px;
+        line-height: 1.45;
+        margin: 0 auto;
+    }
 }
 
 /** Reserved Sponsor Slot (Floating over Desktop Sidebar Bottom & Mobile Drawer) **/

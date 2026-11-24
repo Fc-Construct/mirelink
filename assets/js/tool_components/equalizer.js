@@ -9,6 +9,7 @@ Equalizer = (function() {
         // Change sample rate will affect the curve of filters close to nyquist frequency
         // Here I choosed a common used value, but not all DSP software use this sample rate for EQ
         DefaultSampleRate: 48000,
+        /* AutoEQ disabled for MIRE workflow (preserved for future use)
         // Avoid filters close to nyquist frequency by default, because the behavior is implementation dependent
         // https://github.com/jaakkopasanen/AutoEq/issues/240
         // https://github.com/jaakkopasanen/AutoEq/issues/411
@@ -17,6 +18,7 @@ Equalizer = (function() {
         OptimizeQRange: [.3, 3],
         // Minimum and maximum Gain for AutoEQ feature
         OptimizeGainRange: [-16, 16],
+        */
         // Use to get response diff by EQ before smoothing
         GraphicEQRawFrequences: ( // ~= 1/96 octave
             new Array(Math.ceil(Math.log(20000 / 20) / Math.log(1.0072))).fill(null)
@@ -27,7 +29,7 @@ Equalizer = (function() {
             .map((_, i) => Math.floor(20 * Math.pow(1.0563, i))))).sort((a, b) => a - b),
     };
 
-    let inst = null;
+    // let inst = null;
 
     let interp = function (fv, fr) {
         if (!fr || !fr.length) {
@@ -145,6 +147,62 @@ Equalizer = (function() {
         return -maxGain;
     };
 
+    let calc_filters_preamp = function (filters, sampleRate) {
+        if (!filters || !filters.length) return 0;
+        let coeffs = filters_to_coeffs(filters, sampleRate);
+        if (!coeffs.length) return 0;
+        let gains = calc_gains(config.GraphicEQRawFrequences, coeffs, sampleRate);
+        let maxBoost = 0;
+        for (let i = 0; i < gains.length; ++i) {
+            if (gains[i] > maxBoost) maxBoost = gains[i];
+        }
+        return -maxBoost;
+    };
+
+    // ITU-R BS.1770-4 K-weighting coefficients at 48 kHz (Stage 1 pre-filter shelf + Stage 2 RLB high-pass)
+    const K_WEIGHT_COEFFS_48K = [
+        [1.0, -1.69065929318241, 0.73248077421585, 1.53512485958697, -2.69169618940638, 1.19839281085285],
+        [1.0, -1.99004745483398, 0.99007225036621, 1.0, -2.0, 1.0]
+    ];
+    const LOUDNESS_FREQS = (function() {
+        let count = 128;
+        let fMin = Math.log(20);
+        let fMax = Math.log(20000);
+        let arr = new Array(count);
+        for (let i = 0; i < count; ++i) {
+            arr[i] = Math.exp(fMin + (fMax - fMin) * (i / (count - 1)));
+        }
+        return arr;
+    })();
+    const LOUDNESS_K_WEIGHTS = (function() {
+        let kDb = calc_gains(LOUDNESS_FREQS, K_WEIGHT_COEFFS_48K, 48000);
+        return kDb.map(db => Math.pow(10, db / 10));
+    })();
+    const LOUDNESS_K_WEIGHT_SUM = LOUDNESS_K_WEIGHTS.reduce((a, b) => a + b, 0);
+
+    // Returns dB trim needed to match perceived loudness of active stereo EQ chains against flat bypass
+    let calc_loudness_offset = function (filtersL, filtersR, sampleRate) {
+        let coeffsL = filters_to_coeffs(filtersL || [], sampleRate);
+        let coeffsR = filters_to_coeffs(filtersR || [], sampleRate);
+        if (!coeffsL.length && !coeffsR.length) return 0;
+
+        let gainsL = coeffsL.length ? calc_gains(LOUDNESS_FREQS, coeffsL, sampleRate) : null;
+        let gainsR = coeffsR.length ? calc_gains(LOUDNESS_FREQS, coeffsR, sampleRate) : null;
+
+        let weightedPowerSum = 0;
+        for (let i = 0; i < LOUDNESS_FREQS.length; ++i) {
+            let pL = gainsL ? Math.pow(10, gainsL[i] / 10) : 1;
+            let pR = gainsR ? Math.pow(10, gainsR[i] / 10) : 1;
+            weightedPowerSum += LOUDNESS_K_WEIGHTS[i] * 0.5 * (pL + pR);
+        }
+
+        let powerRatio = weightedPowerSum / LOUDNESS_K_WEIGHT_SUM;
+        if (!isFinite(powerRatio) || powerRatio <= 1e-6) return 0;
+        let offsetDb = -10 * Math.log10(powerRatio);
+        return Math.max(-24, Math.min(12, offsetDb));
+    };
+
+    /* AutoEQ disabled for MIRE workflow (preserved for future use)
     let autoeq = async function (fr, frTarget, maxFilters, mode, smooth = true) {
         if (!inst)
             inst = await AutoEq.make();
@@ -202,6 +260,7 @@ Equalizer = (function() {
 
         return [out, round(res.amp, 2)];
     };
+    */
 
     let filters_to_coeffs = function (filters, sampleRate) {
         return filters.map(f => {
@@ -264,8 +323,10 @@ Equalizer = (function() {
         peaking,
         calc_gains,
         calc_preamp,
+        calc_filters_preamp,
+        calc_loudness_offset,
         apply,
-        as_graphic_eq,
-        autoeq
+        as_graphic_eq
+        // autoeq
     }
 })();

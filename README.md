@@ -103,6 +103,25 @@ This application is customized specifically for **open-canal MIRE headphone acou
 * **The `/public/` Folder**: In the Gemini AI Studio preview environment, the `/public/` directory acts as the static serving root for web assets and scripts.
 * **Automated Asset Mirroring (`autoSyncAssetsPlugin`)**: To prevent manual file duplication, a custom Vite plugin (`autoSyncAssetsPlugin` in `vite.config.ts`) automatically mirrors all files and subdirectories from `/assets/` directly into `/public/assets/` (along with `README.md`) upon dev server startup, build start, and page requests. Developers can edit or add assets exclusively in `/assets/` with instant synchronization.
 
+### 16. Modular Parametric Equalizer, Channel Scoping & Real-Time FFT Spectrum (`eqPanel.js`)
+* **8-Band Standard PEQ Rack (`48 kHz` RBJ Biquad Engine)**: Pre-initialized with an 8-band studio default layout (`60 Hz LSQ Q=0.71`, `200 / 500 / 1000 / 3000 / 6000 / 8000 Hz PK Q=1.0`, `10000 Hz HSQ Q=0.71` in `0.5 dB` gain steps) evaluated via second-order RBJ biquad math (`equalizer.js`), expandable up to `extraEQBandsMax` (20 bands).
+* **Additive 3-Scope Channel Architecture (`L+R`, `Left`, `Right`)**:
+  * Maintains three persistent filter banks—shared **`L+R`** plus independent **`Left`** and **`Right`** trim racks—computing true additive stereo chains (`L = (L+R) + Left`, `R = (L+R) + Right`) for both plotted curves and live audio playback.
+  * Automatically defaults single-model EQ comparisons cleanly to `AVG` (`L+R`) and expands to split `Left`/`Right` channels whenever per-ear trim filters are active, while preserving MIRE's standard `R`-channel multi-headphone comparison behavior.
+  * Displays both **Export Peak `Pre-amp`** (worst-case headroom for Equalizer APO / external hardware) and **Live `Auto-Gain`** (psychoacoustic A/B trim), and supports scope-aware imports/exports (Equalizer APO Parametric TXT and 127-band Wavelet Graphic EQ).
+* **ITU-R BS.1770-4 K-Weighted Loudness-Matched A/B & Click-Free Bypass**:
+  * **Always-On Perceptual Auto-Gain**: Evaluates active Left/Right filter transfer curves against 48 kHz **ITU-R BS.1770-4 K-weighting** over a 128-point logarithmic (`1/f` pink) frequency grid so **`Bypass`** matches perceived loudness rather than biasing toward boosts.
+  * **Volume-Aware Shared Safety Ceiling**: Leaves overall dry/wet playback untouched while boosts stay within current monitor volume headroom; if boosts exceed available digital headroom, a shared safety gain smoothly attenuates **both** Dry and Wet paths equally—preventing `0 dBFS` digital clipping without compression/limiting or loudness jumps.
+  * **Parallel Dry/Wet Graph & In-Place Ramping**: Keeps Dry and stereo Biquad Wet paths permanently wired in parallel, ramping `Bypass` crossfades and live filter `frequency`/`Q`/`gain` edits smoothly via Web Audio `setTargetAtTime` without disconnecting nodes or introducing switching clicks.
+  * **Built-In `ⓘ` Architecture Tooltip**: Hovering or clicking `ⓘ` next to **Parametric Equalizer** displays a floating summary explaining perceptual auto-gain, shared clipping protection, and why `Pre-amp` preserves peak headroom for exports.
+  * **`EQ Curve` Overlay**: Renders the pure combined filter transfer function for the active scope centered directly on the graph reference (`yCenter`), auto-activating on first adjustment, dynamically matching the active `... EQ` curve color, and dimming visually when bypassed for synchronized audio/visual A/B verification.
+* **Real-Time Dual-Tap `16384`-Point `1/12`-Octave FFT Spectrum Analyzer (`#fft-canvas`)**:
+  * **Parallel Stereo Web Audio Chain**: Routes built-in (`Pink Noise`, `Scarlet Fire`), user-uploaded tracks, and a `20 Hz–20 kHz` logarithmic Tone Generator through independent L/R Web Audio `BiquadFilterNode` chains and an attenuation-based stereo balance stage (never applying positive digital boost gain).
+  * **Pre-Fader Metering**: Dual `16384`-point `AnalyserNode` taps sample both **Pre-EQ** and **Post-EQ** signals prior to the master monitor `volumeNode` (default `70%`), keeping spectral levels independent of listening volume.
+  * **Power-Accurate Logarithmic Binning**: Sums fractional-bin linear power across `120` logarithmic `1/12`-octave bands (`20 Hz–20 kHz`) with sub-bin low-frequency interpolation so broadband pink noise renders flat across the spectrum.
+  * **Configurable Display Modes**: Renders onto a hardware-scaled `<canvas id="fft-canvas">` underlay behind `#fr-graph` with selectable **Bars** (default high-density micro-bars) or smooth **Wave** visualization, **Post-EQ / Pre-EQ** tap switching, **Slow / Fast** ballistics (`0.89` / `0.74` analyser smoothing and `8` / `14 dB/s` decay), and a true **1000 ms Peak Hold** envelope.
+* **AutoEQ Excluded for MIRE**: Automated AutoEQ solver controls are commented out and disabled in both `eqPanel.js` and `equalizer.js` to avoid inappropriate coupler-style auto-fitting on open-canal MIRE data.
+
 ---
 
 ## 3. User Guide & REW Export Reminder

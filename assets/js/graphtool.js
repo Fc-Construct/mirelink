@@ -37,6 +37,7 @@ doc.html(`
     <div class="graphBox" data-sticky-graph="`+ alt_sticky_graph +`" data-animated="`+ alt_animated +`">
       <div class="graph-sizer">
         <div class="graph-svg-wrap">
+          <canvas id="fft-canvas" aria-hidden="true"></canvas>
           <svg id="fr-graph" viewBox="0 0 800 434" data-labels-position="`+ labelsPosition +`"></svg>
           <div class="graph-header" id="graph-header">
             <div contenteditable="true" id="graph-title-input" class="graph-header-title" aria-label="Graph title" spellcheck="false"></div>
@@ -148,9 +149,11 @@ doc.html(`
         </table>
       </div>
 
-      <div class="footer-ecosystem"></div>
+      <div class="footer-meta-row">
+        <div class="footer-ecosystem"></div>
 
-      <div class="accessories"></div>
+        <div class="accessories"></div>
+      </div>
 
       <div class="external-links"></div>
     </section>
@@ -200,13 +203,31 @@ doc.html(`
               <span style="margin: 0 0 1em 0"><small>Uploaded data will not be persistent</small></span>
             </div>
             <div class="extra-eq">
-              <h4 style="margin:0 0 6px 0">Parametric Equalizer</h4>
+              <div class="eq-title-row">
+                <h4 style="margin:0">Parametric Equalizer</h4>
+                <button type="button" class="eq-info-btn" id="eq-info-toggle" aria-expanded="false" aria-controls="eq-info-popover" aria-label="About loudness matching and clipping protection">ⓘ</button>
+                <div class="eq-info-popover hidden" id="eq-info-popover" role="tooltip">
+                  <p><strong>Loudness-Matched A/B (Auto-Gain):</strong> Uses ITU-R BS.1770-4 K-weighting so <em>Bypass</em> matches perceived loudness rather than letting boosts sound better just for being louder.</p>
+                  <p><strong>Transparent Clipping Protection:</strong> Only when a boost exceeds your volume headroom, both raw and EQ'd paths attenuate smoothly together—keeping A/B locked with zero limiting or volume jumping.</p>
+                  <p><strong>Click-Free Switching &amp; Export:</strong> Parallel dry/wet crossfading prevents pops on Bypass. <em>Pre-amp</em> preserves worst-case peak headroom for Equalizer APO / hardware export.</p>
+                </div>
+              </div>
               <div class="select-eq-phone">
                 <select name="phone">
                     <option value="" selected>Choose EQ model</option>
                 </select>
               </div>
-              <h4 id="preamp-disp" style="margin-top:12px">Pre-amp: 0.0 dB</h4>
+              <div class="preamp-row">
+                <h4 id="preamp-disp" style="margin:0">Pre-amp: 0.0 dB · Auto-Gain: 0.0 dB</h4>
+              </div>
+              <div class="eq-scope-row" role="group" aria-label="EQ Channel Scope">
+                <span class="eq-scope-label">EQ Scope</span>
+                <div class="eq-scope-pills">
+                  <button type="button" class="eq-scope-btn selected" data-scope="LR" title="Shared 8-band EQ applied to both L and R channels">L+R<span class="scope-dot" aria-hidden="true"></span></button>
+                  <button type="button" class="eq-scope-btn" data-scope="L" title="Additive Left-channel 8-band EQ trim">Left<span class="scope-dot" aria-hidden="true"></span></button>
+                  <button type="button" class="eq-scope-btn" data-scope="R" title="Additive Right-channel 8-band EQ trim">Right<span class="scope-dot" aria-hidden="true"></span></button>
+                </div>
+              </div>
               <div class="filters-header">
                 <span>Type</span>
                 <span>Frequency</span>
@@ -223,17 +244,19 @@ doc.html(`
                         <option value="HSQ">HSQ</option>
                       </select>
                     </span>
-                    <span><input name="freq" type="number" min="20" max="20000" step="1" value="0"></input></span>
-                    <span><input name="gain" type="number" min="-40" max="40" step="0.1" value="0"></input></span>
-                    <span><input name="q" type="number" min="0" max="10" step="0.1" value="0"></input></span>
+                    <span><input name="freq" type="number" min="20" max="20000" step="1" value="60"></input></span>
+                    <span><input name="gain" type="number" min="-40" max="40" step="0.5" value="0"></input></span>
+                    <span><input name="q" type="number" min="0" max="10" step="0.01" value="0.71"></input></span>
                 </div>
               </div>
               <div class="filters-button">
                 <span class="eqopts"><button class="add-filter" style="margin-right:7px;">+</button><button class="remove-filter">-</button></span>
                 <span class="eqopts"><button class="sort-filters">Sort</button></span>
-                <span class="eqopts"><button class="disable-filters">Disable</button></span>
+                <span class="eqopts"><button class="disable-filters">Bypass</button></span>
+                <span class="eqopts"><button class="reset-filters">Reset</button></span>
                 <span class="eqopts"><button class="save-filters">Save EQ</button></span>
               </div>
+              <!-- AutoEQ UI disabled for MIRE workflow (preserved for future use)
               <h4 style="margin: 6px 0 3px 0" >AutoEQ</h4>
               <div class="settings-row" style="margin:0 0 2px 0">
                 <span name="title">Frequency Range</span>
@@ -258,14 +281,49 @@ doc.html(`
                 <button class="autoeq">AutoEQ</button>
                 <button class="readme">Readme</button>
               </div>
-              <h4 style="margin:0">EQ Demo</h4>
-              <div class="eq-demo">
+              -->
+              <h4 style="margin: 8px 0 4px 0">Graph Overlays</h4>
+              <div class="overlay-controls">
+                <button type="button" class="toggle-eq-overlay" title="Plot pure EQ transfer curve centered on the graph reference">EQ Curve</button>
+                <div class="fft-split-btn">
+                  <button type="button" class="toggle-fft selected" title="Show real-time FFT spectrum behind the main graph during playback">FFT Spectrum</button>
+                  <button type="button" class="toggle-fft-drawer" aria-expanded="false" title="Configure FFT style, signal tap, and speed"><span class="fft-chevron">▾</span></button>
+                </div>
+                <button type="button" class="toggle-fft-peak" title="Hold peak envelope for 1 second above the FFT spectrum">Peak Hold</button>
+              </div>
+              <div class="fft-drawer hidden" aria-hidden="true">
+                <div class="fft-mode-row" role="group" aria-label="FFT Display Style">
+                  <span class="fft-mode-label">Style</span>
+                  <div class="fft-mode-pills">
+                    <button type="button" class="fft-style selected" data-style="bars">Bars</button>
+                    <button type="button" class="fft-style" data-style="wave">Wave</button>
+                  </div>
+                </div>
+                <div class="fft-mode-row" role="group" aria-label="FFT Signal Tap">
+                  <span class="fft-mode-label">Tap</span>
+                  <div class="fft-mode-pills">
+                    <button type="button" class="fft-mode selected" data-mode="post">Post-EQ</button>
+                    <button type="button" class="fft-mode" data-mode="pre">Pre-EQ</button>
+                  </div>
+                </div>
+                <div class="fft-mode-row" role="group" aria-label="FFT Response Speed">
+                  <span class="fft-mode-label">Speed</span>
+                  <div class="fft-mode-pills">
+                    <button type="button" class="fft-speed selected" data-speed="slow">Slow</button>
+                    <button type="button" class="fft-speed" data-speed="fast">Fast</button>
+                  </div>
+                </div>
+              </div>
+              <div class="eq-demo-header">
+                <h4 style="margin: 0">EQ Demo</h4>
                 <select class="eq-track">
                     <option value="pink" selected>Pink Noise</option>
                     <option value="scarlet">Scarlet Fire</option>
                     <option value="tone">Tone Generator</option>
                     <option value="custom-eq-track">Uploaded</option>
                 </select>
+              </div>
+              <div class="eq-demo">
                 <span id="songTime">00:00:00</span>
                 <input name="demo-time" type="range" min="0" max="100" step="1" value="0"></input>
                 <div class="volume-button">
@@ -273,7 +331,7 @@ doc.html(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M6 7l8-5v20l-8-5v-10zm-6 10h4v-10h-4v10zm20.264-13.264l-1.497 1.497c1.847 1.783 2.983 4.157 2.983 6.767 0 2.61-1.135 4.984-2.983 6.766l1.498 1.498c2.305-2.153 3.735-5.055 3.735-8.264s-1.43-6.11-3.736-8.264zm-.489 8.264c0-2.084-.915-3.967-2.384-5.391l-1.503 1.503c1.011 1.049 1.637 2.401 1.637 3.888 0 1.488-.623 2.841-1.634 3.891l1.503 1.503c1.468-1.424 2.381-3.309 2.381-5.394z"/></svg>
                   </div>
                   <div class="volume-slider">
-                    <input type="range" min="0" max="100" step="0.5" value="12.5" id="volumeRange">
+                    <input type="range" min="0" max="100" step="0.5" value="70" id="volumeRange">
                   </div>
                 </div>
                 <div id="play-button" style="fill: var(--accent-color-contrast) !important;">
@@ -296,9 +354,9 @@ doc.html(`
                 <span name="balance-r">Right</span>
               </div>
               <div class="settings-row" style="margin:3px 0 6px 0;">
-                <span><input id="vol-left" name="vol-left" type="number" min="0" max="10" step="0.1" value="0"></input></span>
+                <span><input id="vol-left" name="vol-left" type="number" min="-10" max="0" step="0.1" value="0"></input></span>
                 <span name="title"></span>
-                <span><input id="vol-right" name="vol-right" type="number" min="0" max="10" step="0.1" value="0"></input></span>
+                <span><input id="vol-right" name="vol-right" type="number" min="-10" max="0" step="0.1" value="0"></input></span>
               </div>
               <div class="settings-row" name="tone-gen-range" style="margin:3px 0 6px 0;">
                 <input name="balance-vol" type="range" min="-10" max="10" step="0.1" value="0"></input>
@@ -316,7 +374,7 @@ doc.html(`
         <div class="sidebar-sponsor" id="sidebar-sponsor"></div>
       </div>
     </section>
-    <div style="display: none;" class="extra-eq-overlay">AutoEQ is running, it could take 5~20 seconds or more.</div>
+    <!-- <div style="display: none;" class="extra-eq-overlay">AutoEQ is running, it could take 5~20 seconds or more.</div> -->
   </main>
 `);
 
@@ -516,6 +574,7 @@ rangeSel.on("click", function (_,i) {
     let dur = Math.min(r,s)===0 && Math.max(r,s)===2 ? 1100 : 700;
     clearLabels();
     gpath.selectAll("path").transition().duration(dur).attr("d", drawLine);
+    if (typeof window.transitionEQOverlay === "function") { window.transitionEQOverlay(dur); }
     let e = edgeWs[s];
     fadeEdge.transition().duration(dur).attrs(i=>({x:i?W-e[i]:0, width:e[i]}));
     xAxisObj.transition().duration(dur).call(fmtX);
@@ -596,6 +655,7 @@ dB.updatey = function (dom) {
     let getTr = o => o ? "translate(0,"+(y(o)-y(0))+")" : null;
     //clearLabels();
     gpath.selectAll("path").call(redrawLine);
+    if (typeof window.redrawEQOverlay === "function") { window.redrawEQOverlay(); }
     if (typeof window.refreshCalcBadge === "function") { window.refreshCalcBadge(); }
 }
 
@@ -1738,6 +1798,10 @@ let gpath = gr.insert("g",".dBScaler, g.labels-layer, g.tools-layer")
     .attr("stroke-width",2.1)
     .attr("class", "curves-g")
     .attr("mask","url(#graphFade)");
+let eqOverlayLayer = gr.insert("g", ".dBScaler, g.labels-layer, g.tools-layer")
+    .attr("class", "eq-overlay-layer")
+    .attr("mask", "url(#graphFade)")
+    .style("pointer-events", "none");
 function hl(p, h) {
     if (typeof h === "function") {
         gpath.selectAll("path").filter(c => c.p === p).classed("highlight", c => !!h(c));
@@ -1920,10 +1984,14 @@ function updateYCenter() {
 function setBaseline(b, no_transition) {
     baseline = b;
     updateYCenter();
-    if (no_transition) return;
+    if (no_transition) {
+        if (typeof window.redrawEQOverlay === "function") { window.redrawEQOverlay(); }
+        return;
+    }
     gpath.selectAll("path")
         .transition().duration(500).ease(d3.easeQuad)
         .attr("d", drawLine);
+    if (typeof window.redrawEQOverlay === "function") { window.redrawEQOverlay(); }
     table.selectAll("tr").select(".button")
         .classed("selected", p => p===baseline.p || (p.basedOn && p.basedOn===baseline.p));
     
@@ -2054,6 +2122,7 @@ function updatePaths(trigger) {
     if (stickyLabels) drawLabels();
     if (typeof window.syncGraphHeader === "function") { window.syncGraphHeader(); }
     if (typeof window.refreshCalcBadge === "function") { window.refreshCalcBadge(); }
+    if (typeof window.redrawEQOverlay === "function") { window.redrawEQOverlay(); }
 }
 
 // Preference bounds (loadPrefBounds, setPrefBounds, prepPrefBounds, prefBoundsObj)
@@ -2190,33 +2259,58 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
     smoothPhone(p);
     if (p.id === undefined) { p.id = getPhoneNumber(); }
     normalizePhone(p); p.offset=p.offset||0;
+    let isComparePhone = q => !q.isTarget && !q.isPrefBounds && !q.eqParent;
     if (exclusive) {
         activePhones = activePhones.filter(q => q.active = keep(q));
         if (baseline.p && !baseline.p.active) {
             if (baseline.p.phone != customTiltName && !dfBaseline) setBaseline(baseline0,1);
         }
-        let apRem = activePhones.filter(q => !q.isTarget && !q.isPrefBounds);
+        let apRem = activePhones.filter(isComparePhone);
         if (apRem.length === 1) {
-            setCurves(apRem[0], false, undefined);
+            if (apRem[0].eq && apRem[0].eq.active) {
+                let wantAvg = !apRem[0].eq.hasChannelSplits;
+                setCurves(apRem[0], wantAvg, undefined);
+                setCurves(apRem[0].eq, wantAvg, undefined);
+            } else {
+                setCurves(apRem[0], false, undefined);
+            }
         }
     }
     if (activePhones.indexOf(p)===-1) {
         let avg = false;
+        let eqDefaultAvg = undefined;
         if (!p.isTarget) {
-            let ap = activePhones.filter(p => !p.isTarget && !p.isPrefBounds);
-            avg = ap.length >= 1;
-            if (avg && ap.length===1 && ap[0].activeCurves.length!==1) {
-                setCurves(ap[0], false, 1);
-            }
-            activePhones.push(p);
-            if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
-                window.resetGraphTools();
+            let ap = activePhones.filter(isComparePhone);
+            if (!p.eqParent) {
+                avg = ap.length >= 1;
+                if (avg && ap.length===1 && ap[0].activeCurves.length!==1) {
+                    setCurves(ap[0], false, 1);
+                }
+                if (avg && ap.length===1 && ap[0].eq && ap[0].eq.active && ap[0].eq.activeCurves.length!==1) {
+                    setCurves(ap[0].eq, false, 1);
+                }
+                activePhones.push(p);
+                if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
+                    window.resetGraphTools();
+                }
+            } else {
+                // Attached EQ layer follows single-model AVG default (or L+R when split trims exist),
+                // while yielding cleanly to R-solo when 2+ comparison headphones are plotted.
+                activePhones.push(p);
+                if (ap.length >= 2) {
+                    avg = true;
+                } else {
+                    eqDefaultAvg = !p.hasChannelSplits;
+                    if (p.eqParent && p.eqParent.active) {
+                        setCurves(p.eqParent, eqDefaultAvg, undefined);
+                    }
+                }
             }
         } else {
             activePhones.unshift(p);
         }
         p.active = true;
-        setCurves(p, false, avg ? 1 : undefined);
+        setCurves(p, eqDefaultAvg !== undefined ? eqDefaultAvg : false, avg ? 1 : undefined);
     }
     if (p.isTarget && tiltableTargets.includes(p.dispName) && p.phone !== "Custom Tilt") { // Tilt the target
         if (p.dispName === "Fc-Construct DF-HRTF") {
@@ -2266,6 +2360,23 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
     }
 }
 
+window.syncEQPairChannels = function(basePhone, hasChannelSplits) {
+    if (!basePhone || !basePhone.eq || !basePhone.eq.active) return;
+    let eqPhone = basePhone.eq;
+    eqPhone.hasChannelSplits = !!hasChannelSplits;
+    let comparePhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent);
+    if (comparePhones.length >= 2) {
+        // Respect MIRE multi-headphone R-solo comparison workflow
+        return;
+    }
+    let wantAvg = !hasChannelSplits;
+    if (basePhone.active) {
+        setCurves(basePhone, wantAvg, undefined);
+    }
+    setCurves(eqPhone, wantAvg, undefined);
+    updatePaths();
+};
+
 function removeCopies(p) {
     if (p.objs) {
         p.objs.forEach(q=>q.active=false);
@@ -2275,12 +2386,21 @@ function removeCopies(p) {
 }
 
 function removePhone(p) {
+    if (p.eqParent && p.eqParent.eq === p) {
+        p.eqParent.eq = null;
+    }
     p.active = p.pin = false; nextPN = null;
     activePhones = activePhones.filter(q => q.active);
     if (!p.isTarget) {
-        let ap = activePhones.filter(p => !p.isTarget && !p.isPrefBounds);
+        let ap = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent);
         if (ap.length === 1) {
-            setCurves(ap[0], false, undefined);
+            if (ap[0].eq && ap[0].eq.active) {
+                let wantAvg = !ap[0].eq.hasChannelSplits;
+                setCurves(ap[0], wantAvg, undefined);
+                setCurves(ap[0].eq, wantAvg, undefined);
+            } else {
+                setCurves(ap[0], false, undefined);
+            }
         }
         if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
             window.resetGraphTools();
@@ -3553,6 +3673,10 @@ function enableHorizontalDragScroll(el) {
     let startScrollLeft = 0;
     let hasDragged = false;
 
+    el.addEventListener("dragstart", function(e) {
+        e.preventDefault();
+    });
+
     el.addEventListener("mousedown", function(e) {
         if (e.button !== 0) return;
         if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
@@ -3600,6 +3724,7 @@ function enableHorizontalDragScroll(el) {
 }
 window.enableHorizontalDragScroll = enableHorizontalDragScroll;
 enableHorizontalDragScroll(document.querySelector("div.tools"));
+enableHorizontalDragScroll(document.querySelector("div.external-links"));
 
 function initMobileGraphTopSync() {
     let mainEl = document.querySelector("main.main");

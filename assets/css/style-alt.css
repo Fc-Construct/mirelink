@@ -135,8 +135,9 @@ g.lineLabel text {
 
 svg#fr-graph {
     position: relative;
+    z-index: 1;
     
-    background-color: var(--background-color-graph);
+    background-color: transparent;
     
     pointer-events: none;
 }
@@ -545,6 +546,7 @@ div.graph-svg-wrap {
     position: relative;
     width: 100%;
     container-type: inline-size;
+    background-color: var(--background-color-graph);
 }
 
 div.graph-header {
@@ -1048,11 +1050,11 @@ div.extra-panel button {
     padding: 11px 8px;
     margin: 0;
     
-    background-color: var(--background-color) !important;
+    background-color: var(--background-color);
     border: 1px solid var(--background-color-contrast-more);
     border-radius: 6px;
     
-    color: var(--accent-color-contrast);
+    color: var(--font-color-primary);
     font-family: var(--font-primary);
     font-weight: 400;
     font-size: 12px;
@@ -1062,6 +1064,11 @@ div.extra-panel button {
     white-space: nowrap;
     cursor: pointer;
     outline: none;
+}
+
+div.miscTools button {
+    background-color: var(--background-color) !important;
+    color: var(--accent-color-contrast);
 }
 
 div.miscTools button span {
@@ -2257,7 +2264,8 @@ div.select > div.selector-panel > div.scroll-container {
 div.select > div.extra-panel {
     box-sizing: border-box;
     padding: 16px 16px 24px 16px;
-    height: 100%;
+    flex: 1 1 0%;
+    min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -2817,8 +2825,19 @@ div.external-links {
     padding: 16px;
     overflow-x: auto;
     overflow-y: hidden;
+    scrollbar-width: none;
+    cursor: grab;
     
     border-top: 1px solid var(--background-color-contrast-more);
+}
+
+div.external-links::-webkit-scrollbar {
+    display: none;
+}
+
+div.external-links.is-dragging {
+    cursor: grabbing;
+    user-select: none;
 }
 
 div.external-links:empty {

@@ -39,10 +39,11 @@ const init_phones = ["10 dB downwards tilt Target", "Sennheiser HE1"], // Graphs
       extraEnabled = true,
       extraUploadEnabled = true,                    // Allow user upload for comparison
       extraEQEnabled = true,                        // Parametric EQ module
-      extraEQBands = 10,
+      extraEQBands = 8,
       extraEQBandsMax = 20,
-      autoEqMode = 'OE',                            // AutoEQ smoothing mode ('OE' for over-ear headphones)
-      autoEqSmooth = true,
+      // AutoEQ disabled for MIRE workflow (commented out for future reference)
+      // autoEqMode = 'OE',
+      // autoEqSmooth = true,
       num_samples = 3;                              // Default seating samples per channel
 
 // Target curves: Flat reference representing personal DF-HRTF baseline
