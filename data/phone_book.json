@@ -208,6 +208,53 @@
           "",
           "Glasses"
         ]
+      },
+      {
+        "name": "Open Wireless 2",
+        "file": [
+          "Philphone Open Wireless 2",
+          "Philphone Open Wireless 2 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "Open Wireless 2 (Airplane)",
+        "file": "Philphone Open Wireless 2 (Airplane)"
+      },
+      {
+        "name": "Open Wireless 2 (Bass Airplane)",
+        "file": "Philphone Open Wireless 2 (Bass Airplane)"
+      },
+      {
+        "name": "Open Wireless 2 (Bass Home)",
+        "file": "Philphone Open Wireless 2 (Bass Home)"
+      },
+      {
+        "name": "Open Wireless 2 (Bass)",
+        "file": "Philphone Open Wireless 2 (Bass)"
+      },
+      {
+        "name": "Open Wireless 2 (Home)",
+        "file": "Philphone Open Wireless 2 (Home)"
+      },
+      {
+        "name": "Open Wireless 2 (Leak Reduction)",
+        "file": "Philphone Open Wireless 2 (Leak Reduction)"
+      },
+      {
+        "name": "Open Wireless 2 (Treble)",
+        "file": "Philphone Open Wireless 2 (Treble)"
+      },
+      {
+        "name": "Open Wireless 2 (V-Shaped)",
+        "file": "Philphone Open Wireless 2 (V-Shaped)"
+      },
+      {
+        "name": "Open Wireless 2 (Vocals)",
+        "file": "Philphone Open Wireless 2 (Vocals)"
       }
     ]
   },
@@ -361,6 +408,118 @@
           "Stock Glasses",
           "Bass",
           "Bass Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Lewitt",
+    "phones": [
+      {
+        "name": "LW6",
+        "file": [
+          "Lewitt LW6",
+          "Lewitt LW6 G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "LW6 (Bass)",
+        "file": "Lewitt LW6 (Bass)"
+      },
+      {
+        "name": "LW6 (High)",
+        "file": "Lewitt LW6 (High)"
+      },
+      {
+        "name": "LW6 (Virtual)",
+        "file": "Lewitt LW6 (Virtual)"
+      }
+    ]
+  },
+  {
+    "name": "Loewe",
+    "phones": [
+      {
+        "name": "Leo",
+        "file": [
+          "Loewe Leo",
+          "Loewe Leo G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      },
+      {
+        "name": "Leo (ANC 100)",
+        "file": "Loewe Leo (ANC 100)"
+      },
+      {
+        "name": "Leo (ANC 50)",
+        "file": "Loewe Leo (ANC 50)"
+      },
+      {
+        "name": "Leo (Bass)",
+        "file": "Loewe Leo (Bass)"
+      },
+      {
+        "name": "Leo (Classic)",
+        "file": "Loewe Leo (Classic)"
+      },
+      {
+        "name": "Leo (Pop)",
+        "file": "Loewe Leo (Pop)"
+      },
+      {
+        "name": "Leo (Rock)",
+        "file": "Loewe Leo (Rock)"
+      },
+      {
+        "name": "Leo (Transparent)",
+        "file": "Loewe Leo (Transparent)"
+      },
+      {
+        "name": "Leo (Voice)",
+        "file": "Loewe Leo (Voice)"
+      },
+      {
+        "name": "Leo G (Classic)",
+        "file": "Loewe Leo G (Classic)"
+      }
+    ]
+  },
+  {
+    "name": "Myster",
+    "phones": [
+      {
+        "name": "Puff Muffs",
+        "file": [
+          "Myster Puff Muffs",
+          "Myster Puff Muffs G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "SJY",
+    "phones": [
+      {
+        "name": "Argos",
+        "file": [
+          "SJY Argos",
+          "SJY Argos G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
         ]
       }
     ]
