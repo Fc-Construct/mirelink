@@ -156,6 +156,22 @@
     "HEDD Audio D1 G R2.txt",
     "HEDD Audio D1 G R3.txt"
   ],
+  "HEDD Audio DX": [
+    "HEDD Audio DX L1.txt",
+    "HEDD Audio DX L2.txt",
+    "HEDD Audio DX L3.txt",
+    "HEDD Audio DX R1.txt",
+    "HEDD Audio DX R2.txt",
+    "HEDD Audio DX R3.txt"
+  ],
+  "HEDD Audio DX G": [
+    "HEDD Audio DX G L1.txt",
+    "HEDD Audio DX G L2.txt",
+    "HEDD Audio DX G L3.txt",
+    "HEDD Audio DX G R1.txt",
+    "HEDD Audio DX G R2.txt",
+    "HEDD Audio DX G R3.txt"
+  ],
   "HiFiMan Edition XV": [
     "HiFiMan Edition XV L1.txt",
     "HiFiMan Edition XV L2.txt",
@@ -300,6 +316,75 @@
     "Hongshu EH-1 G R2.txt",
     "Hongshu EH-1 G R3.txt"
   ],
+  "Lewitt LW6": [
+    "Lewitt LW6 L1.txt",
+    "Lewitt LW6 L2.txt",
+    "Lewitt LW6 L3.txt",
+    "Lewitt LW6 R1.txt",
+    "Lewitt LW6 R2.txt",
+    "Lewitt LW6 R3.txt"
+  ],
+  "Lewitt LW6 (Bass)": [
+    "Lewitt LW6 (Bass) R3.txt"
+  ],
+  "Lewitt LW6 (High)": [
+    "Lewitt LW6 (High) R3.txt"
+  ],
+  "Lewitt LW6 (Virtual)": [
+    "Lewitt LW6 (Virtual) R3.txt"
+  ],
+  "Lewitt LW6 G": [
+    "Lewitt LW6 G L1.txt",
+    "Lewitt LW6 G L2.txt",
+    "Lewitt LW6 G L3.txt",
+    "Lewitt LW6 G R1.txt",
+    "Lewitt LW6 G R2.txt",
+    "Lewitt LW6 G R3.txt"
+  ],
+  "Loewe Leo": [
+    "Loewe Leo L1.txt",
+    "Loewe Leo L2.txt",
+    "Loewe Leo L3.txt",
+    "Loewe Leo R1.txt",
+    "Loewe Leo R2.txt",
+    "Loewe Leo R3.txt"
+  ],
+  "Loewe Leo (ANC 100)": [
+    "Loewe Leo (ANC 100) R3.txt"
+  ],
+  "Loewe Leo (ANC 50)": [
+    "Loewe Leo (ANC 50) R3.txt"
+  ],
+  "Loewe Leo (Bass)": [
+    "Loewe Leo (Bass) R3.txt"
+  ],
+  "Loewe Leo (Classic)": [
+    "Loewe Leo (Classic) R3.txt"
+  ],
+  "Loewe Leo (Pop)": [
+    "Loewe Leo (Pop) R3.txt"
+  ],
+  "Loewe Leo (Rock)": [
+    "Loewe Leo (Rock) R3.txt"
+  ],
+  "Loewe Leo (Transparent)": [
+    "Loewe Leo (Transparent) R3.txt"
+  ],
+  "Loewe Leo (Voice)": [
+    "Loewe Leo (Voice) R3.txt"
+  ],
+  "Loewe Leo G": [
+    "Loewe Leo G L1.txt",
+    "Loewe Leo G L2.txt",
+    "Loewe Leo G L3.txt",
+    "Loewe Leo G R1.txt",
+    "Loewe Leo G R2.txt",
+    "Loewe Leo G R3.txt"
+  ],
+  "Loewe Leo G (Classic)": [
+    "Loewe Leo G (Classic) L4.txt",
+    "Loewe Leo G (Classic) R4.txt"
+  ],
   "Mirph Vitrum": [
     "Mirph Vitrum L1.txt",
     "Mirph Vitrum L2.txt",
@@ -332,6 +417,22 @@
     "Mirph Vitrum ZMF G R2.txt",
     "Mirph Vitrum ZMF G R3.txt"
   ],
+  "Myster Puff Muffs": [
+    "Myster Puff Muffs L1.txt",
+    "Myster Puff Muffs L2.txt",
+    "Myster Puff Muffs L3.txt",
+    "Myster Puff Muffs R1.txt",
+    "Myster Puff Muffs R2.txt",
+    "Myster Puff Muffs R3.txt"
+  ],
+  "Myster Puff Muffs G": [
+    "Myster Puff Muffs G L1.txt",
+    "Myster Puff Muffs G L2.txt",
+    "Myster Puff Muffs G L3.txt",
+    "Myster Puff Muffs G R1.txt",
+    "Myster Puff Muffs G R2.txt",
+    "Myster Puff Muffs G R3.txt"
+  ],
   "Philphone Open": [
     "Philphone Open L1.txt",
     "Philphone Open L2.txt",
@@ -347,6 +448,63 @@
     "Philphone Open G R1.txt",
     "Philphone Open G R2.txt",
     "Philphone Open G R3.txt"
+  ],
+  "Philphone Open Wireless 2": [
+    "Philphone Open Wireless 2 L1.txt",
+    "Philphone Open Wireless 2 L2.txt",
+    "Philphone Open Wireless 2 L3.txt",
+    "Philphone Open Wireless 2 R1.txt",
+    "Philphone Open Wireless 2 R2.txt",
+    "Philphone Open Wireless 2 R3.txt"
+  ],
+  "Philphone Open Wireless 2 (Airplane)": [
+    "Philphone Open Wireless 2 (Airplane) L3.txt"
+  ],
+  "Philphone Open Wireless 2 (Bass Airplane)": [
+    "Philphone Open Wireless 2 (Bass Airplane) L3.txt"
+  ],
+  "Philphone Open Wireless 2 (Bass Home)": [
+    "Philphone Open Wireless 2 (Bass Home) L3.txt"
+  ],
+  "Philphone Open Wireless 2 (Bass)": [
+    "Philphone Open Wireless 2 (Bass) L3.txt"
+  ],
+  "Philphone Open Wireless 2 (Home)": [
+    "Philphone Open Wireless 2 (Home) L3.txt"
+  ],
+  "Philphone Open Wireless 2 (Leak Reduction)": [
+    "Philphone Open Wireless 2 (Leak Reduction) L3.txt"
+  ],
+  "Philphone Open Wireless 2 (Treble)": [
+    "Philphone Open Wireless 2 (Treble) L3.txt"
+  ],
+  "Philphone Open Wireless 2 (V-Shaped)": [
+    "Philphone Open Wireless 2 (V-Shaped) L3.txt"
+  ],
+  "Philphone Open Wireless 2 (Vocals)": [
+    "Philphone Open Wireless 2 (Vocals) L3.txt"
+  ],
+  "Philphone Open Wireless 2 G": [
+    "Philphone Open Wireless 2 G L1.txt",
+    "Philphone Open Wireless 2 G L2.txt",
+    "Philphone Open Wireless 2 G L3.txt",
+    "Philphone Open Wireless 2 G R1.txt",
+    "Philphone Open Wireless 2 G R2.txt",
+    "Philphone Open Wireless 2 G R3.txt"
+  ],
+  "SJY Argos": [
+    "SJY Argos L1.txt",
+    "SJY Argos L2.txt",
+    "SJY Argos L3.txt",
+    "SJY Argos R1.txt",
+    "SJY Argos R2.txt",
+    "SJY Argos R3.txt"
+  ],
+  "SJY Argos G": [
+    "SJY Argos G L1.txt",
+    "SJY Argos G L2.txt",
+    "SJY Argos G R1.txt",
+    "SJY Argos G R2.txt"
   ],
   "Sennheiser HD 600": [
     "Sennheiser HD 600 L1.txt",

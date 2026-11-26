@@ -97,6 +97,17 @@
           "",
           "Glasses"
         ]
+      },
+      {
+        "name": "DX",
+        "file": [
+          "HEDD Audio DX",
+          "HEDD Audio DX G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
       }
     ]
   },
