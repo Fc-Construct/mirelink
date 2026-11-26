@@ -30,12 +30,45 @@
 
     function buildAutoTitleParts(phones) {
         if (!phones || phones.length === 0) return [];
+        let visibleBaseKeys = new Set();
+        phones.forEach(p => {
+            if (!p || p.isEQSnapshot || p.eqParent) return;
+            let brand = getPhoneBrand(p);
+            let model = getPhoneModel(p, brand);
+            let full = brand ? (brand + " " + model).trim() : model;
+            if (full) visibleBaseKeys.add(full.toLowerCase());
+        });
+
+        let seenBaseKeys = new Set();
         let prevBrandLower = "";
 
         return phones.map((p, idx) => {
+            if (p && p.isEQSnapshot) {
+                let eqName = (p.dispName || p.phone || "Custom EQ").trim();
+                if (p.isSandboxEQ) {
+                    return eqName;
+                }
+                let baseBrand = (p.eqBaseBrand || "").trim();
+                let baseModel = (p.eqBaseModel || "").trim();
+                let baseKey = (p.eqBaseKey || (baseBrand ? (baseBrand + " " + baseModel).trim() : baseModel)).trim();
+                let baseKeyLower = baseKey.toLowerCase();
+
+                if (!baseKey || visibleBaseKeys.has(baseKeyLower) || seenBaseKeys.has(baseKeyLower)) {
+                    return eqName;
+                }
+                seenBaseKeys.add(baseKeyLower);
+                let brandLower = baseBrand.toLowerCase();
+                let omitBrand = idx > 0 && brandLower && brandLower === prevBrandLower;
+                prevBrandLower = brandLower;
+                let baseDisp = omitBrand ? baseModel : baseKey;
+                return baseDisp ? (baseDisp + " (" + eqName + ")") : eqName;
+            }
+
             let brand = getPhoneBrand(p);
             let brandLower = brand.toLowerCase();
             let model = getPhoneModel(p, brand);
+            let fullKey = (brand ? (brand + " " + model).trim() : model).toLowerCase();
+            if (fullKey) seenBaseKeys.add(fullKey);
             let omitBrand = idx > 0 && brandLower && brandLower === prevBrandLower;
             prevBrandLower = brandLower;
             if (omitBrand) {

@@ -1819,6 +1819,9 @@
             await playerAudio.play();
             isPlaying = true;
             if (bridge) bridge.setExternalPlaying(playerAudio, true);
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("music_player_played");
+            }
         } catch (_) {
             isPlaying = false;
             if (bridge) bridge.setExternalPlaying(playerAudio, false);
@@ -3130,6 +3133,9 @@
             return;
         }
         setMode(mode === "minimized" ? "minimized" : "expanded");
+        if (typeof window.trackFeatureUsed === "function") {
+            window.trackFeatureUsed("music_player_opened");
+        }
     };
 
     window.closeMusicPlayer = function () {
@@ -3144,6 +3150,9 @@
         }
         if (!mounted || state.mode === "closed") {
             setMode(state.mode === "minimized" ? "minimized" : "expanded");
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("music_player_opened");
+            }
         } else {
             setMode("closed");
         }

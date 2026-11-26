@@ -114,16 +114,29 @@ function initCustomSponsor(config) {
         return wrap;
     }
 
-    function buildSponsorCard(item) {
+    function buildSponsorCard(item, placement) {
         const type = item.type || "productSpotlight";
         const fitMode = item.fitMode || config.defaultFitMode || "ambient";
+        const resolvedUrl = safeUrl(item.url);
         const link = document.createElement("a");
         link.className = "sponsor-card sponsor-type-" + type;
-        link.href = safeUrl(item.url);
+        link.href = resolvedUrl;
         link.target = "_blank";
         link.rel = "noopener noreferrer sponsored";
         if (item.name) link.setAttribute("aria-label", item.name);
         if (item.bgColor) link.style.backgroundColor = item.bgColor;
+
+        link.addEventListener("click", function() {
+            if (resolvedUrl !== "#" && typeof window.trackSponsorClick === "function") {
+                window.trackSponsorClick({
+                    id: item.id,
+                    name: item.name,
+                    type: type,
+                    placement: placement,
+                    url: resolvedUrl
+                });
+            }
+        });
 
         if (item.imageUrl) {
             const frame = document.createElement("div");
@@ -184,8 +197,8 @@ function initCustomSponsor(config) {
     }
 
     const targets = [];
-    if (placements.desktopSidebar && desktopMount) targets.push({ mount: desktopMount, variant: "sidebar" });
-    if (placements.mobileMenu && mobileMount) targets.push({ mount: mobileMount, variant: "mobile" });
+    if (placements.desktopSidebar && desktopMount) targets.push({ mount: desktopMount, variant: "sidebar", placement: "desktop_sidebar" });
+    if (placements.mobileMenu && mobileMount) targets.push({ mount: mobileMount, variant: "mobile", placement: "mobile_menu" });
     if (targets.length === 0) return;
 
     const cardHeight = Math.max(64, Number(config.cardHeight) || 152);
@@ -200,8 +213,84 @@ function initCustomSponsor(config) {
     let currentIndex = 0;
     let isPaused = false;
     let rotateTimer = null;
+    let activeImpressionEntries = [];
+    let impressionObserver = null;
+
+    function isCardViewable(cardEl, placement) {
+        if (!cardEl || !cardEl.isConnected) return false;
+        if (document.visibilityState && document.visibilityState !== "visible") return false;
+        const rect = cardEl.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        if (placement === "mobile_menu") {
+            const headerEl = cardEl.closest("header.header");
+            if (headerEl && headerEl.getAttribute("data-links") === "collapsed") return false;
+        }
+        return true;
+    }
+
+    function clearPendingImpressions() {
+        activeImpressionEntries.forEach(function(rec) {
+            if (rec.timer) {
+                clearTimeout(rec.timer);
+                rec.timer = null;
+            }
+            if (impressionObserver && rec.el) {
+                try { impressionObserver.unobserve(rec.el); } catch (_) {}
+            }
+        });
+        activeImpressionEntries = [];
+    }
+
+    function scheduleImpression(rec) {
+        if (rec.fired || rec.timer) return;
+        if (!rec.inView || !isCardViewable(rec.el, rec.placement)) return;
+        rec.timer = setTimeout(function() {
+            rec.timer = null;
+            if (!rec.fired && rec.inView && isCardViewable(rec.el, rec.placement)) {
+                rec.fired = true;
+                if (typeof window.trackSponsorImpression === "function") {
+                    window.trackSponsorImpression({
+                        id: rec.item.id,
+                        name: rec.item.name,
+                        type: rec.item.type || "productSpotlight",
+                        placement: rec.placement
+                    });
+                }
+            }
+        }, 1000);
+    }
+
+    if (typeof IntersectionObserver === "function") {
+        impressionObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                const rec = activeImpressionEntries.find(function(r) { return r.el === entry.target; });
+                if (!rec) return;
+                rec.inView = entry.isIntersecting && entry.intersectionRatio >= 0.5;
+                if (rec.inView) {
+                    scheduleImpression(rec);
+                } else if (rec.timer) {
+                    clearTimeout(rec.timer);
+                    rec.timer = null;
+                }
+            });
+        }, { threshold: [0.5] });
+
+        document.addEventListener("visibilitychange", function() {
+            if (document.visibilityState === "visible") {
+                activeImpressionEntries.forEach(scheduleImpression);
+            } else {
+                activeImpressionEntries.forEach(function(rec) {
+                    if (rec.timer) {
+                        clearTimeout(rec.timer);
+                        rec.timer = null;
+                    }
+                });
+            }
+        });
+    }
 
     function renderAll() {
+        clearPendingImpressions();
         const currentItem = eligible[currentIndex];
         targets.forEach(function(target) {
             target.mount.innerHTML = "";
@@ -240,7 +329,21 @@ function initCustomSponsor(config) {
                 target.mount.append(header);
             }
 
-            target.mount.append(buildSponsorCard(currentItem));
+            const cardEl = buildSponsorCard(currentItem, target.placement);
+            target.mount.append(cardEl);
+
+            if (impressionObserver) {
+                const rec = {
+                    el: cardEl,
+                    item: currentItem,
+                    placement: target.placement,
+                    inView: false,
+                    timer: null,
+                    fired: false
+                };
+                activeImpressionEntries.push(rec);
+                impressionObserver.observe(cardEl);
+            }
         });
     }
 

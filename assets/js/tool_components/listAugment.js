@@ -334,11 +334,11 @@ function augmentList(phone) {
             }
             augmentsReviewLink.setAttribute('href', reviewLink);
             augmentsReviewLink.textContent = 'Review';
-            if (analyticsEnabled) {
-                augmentsReviewLink.addEventListener('click', function() {
-                    pushPhoneTag("clicked_review", phone);
-                });
-            }
+            augmentsReviewLink.addEventListener('click', function() {
+                if (typeof window.trackOutboundClick === "function") {
+                    window.trackOutboundClick("review", phone.fullName || phone.dispName || "Review", reviewLink);
+                }
+            });
 
             agumentsContainer.append(augmentsRow2);
         }
@@ -350,11 +350,11 @@ function augmentList(phone) {
             
             augmentsShopLink.setAttribute('href', shopLink);
             augmentsShopLink.textContent = shopLinkLabel;
-            if (analyticsEnabled) {
-                augmentsShopLink.addEventListener('click', function() {
-                    pushPhoneTag("clicked_store", phone);
-                });
-            }
+            augmentsShopLink.addEventListener('click', function() {
+                if (typeof window.trackOutboundClick === "function") {
+                    window.trackOutboundClick("shop", phone.fullName || phone.dispName || shopLinkLabel, shopLink);
+                }
+            });
 
             agumentsContainer.append(augmentsRow3);
         }

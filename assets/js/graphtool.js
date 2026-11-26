@@ -116,19 +116,19 @@ doc.html(`
         <div class="customDF">
           <span>Preference Adjustments:</span>
           <div>
-            <input type="number" inputmode="decimal" id="cusdf-tilt" value="`+ default_tilt +`" step="0.1""></input>
+            <input type="number" inputmode="decimal" id="cusdf-tilt" value="`+ default_tilt +`" step="0.1"></input>
             <span>Tilt (dB/Oct)</span>
           </div>
           <div>
-            <input type="number" inputmode="decimal" id="cusdf-bass" value="`+ default_bass_shelf +`" step="1""></input>
+            <input type="number" inputmode="decimal" id="cusdf-bass" value="`+ default_bass_shelf +`" step="0.1"></input>
             <span>Bass (dB)</span>
           </div>
           <div>
-            <input type="number" inputmode="decimal" id="cusdf-treb" value="`+ default_treble +`" step="0.1""></input>
+            <input type="number" inputmode="decimal" id="cusdf-treb" value="`+ default_treble +`" step="0.1"></input>
             <span>Treble (dB)</span>
           </div>
           <div>
-            <input type="number" inputmode="decimal" id="cusdf-ear" value="`+ default_ear +`" step="0.1""></input>
+            <input type="number" inputmode="decimal" id="cusdf-ear" value="`+ default_ear +`" step="0.1"></input>
             <span>Ear Gain (dB)</span>
           </div>
           <button id="cusdf-UnTiltTHIS" style="margin-right: 10px">Remove Adjustments</button>
@@ -261,7 +261,7 @@ doc.html(`
               </div>
               <div class="select-eq-phone">
                 <select name="phone">
-                    <option value="" selected>Choose EQ model</option>
+                    <option value="" selected>Sandbox</option>
                 </select>
               </div>
               <div class="preamp-row">
@@ -302,6 +302,12 @@ doc.html(`
                 <span class="eqopts"><button class="disable-filters">Bypass</button></span>
                 <span class="eqopts"><button class="reset-filters">Reset</button></span>
                 <span class="eqopts"><button class="save-filters">Save EQ</button></span>
+              </div>
+              <div class="eq-saved-section hidden" aria-label="Saved Custom EQ Presets">
+                <div class="eq-saved-header">
+                  <span>Saved Custom EQ</span>
+                </div>
+                <div class="eq-saved-list"></div>
               </div>
               <!-- AutoEQ UI disabled for MIRE workflow (preserved for future use)
               <h4 style="margin: 6px 0 3px 0" >AutoEQ</h4>
@@ -717,6 +723,32 @@ doc.select("#yscalebtn").on("click", function() {
 let getFullName = p => p.dispBrand+" "+p.dispName,
     getChannelName = p => n => getFullName(p) + " ("+n+")";
 
+function getCurveDisplayLabel(c) {
+    if (!c) return "";
+    let p = c.p;
+    if (!p || !p.isEQSnapshot || p.isTarget) {
+        return c.id;
+    }
+    let baseMatchVisible = false;
+    if (typeof activePhones !== "undefined" && Array.isArray(activePhones)) {
+        baseMatchVisible = activePhones.some(q =>
+            q && !q.hide && !q.isTarget && !q.isPrefBounds && !q.isEQSnapshot && !q.eqParent &&
+            (q === p.eqParent || (p.eqBaseKey && q.brand && (q.brand.name + " " + q.dispName) === p.eqBaseKey))
+        );
+    }
+    let chMatch = c.id ? c.id.match(/\s(\([^)]+\))$/) : null;
+    let chSuffix = chMatch ? (" " + chMatch[1]) : "";
+    let shortBase;
+    if (p.isSandboxEQ || baseMatchVisible) {
+        shortBase = p.dispName;
+    } else if (p.eqBaseModel) {
+        shortBase = p.eqBaseModel + " · " + p.dispName;
+    } else {
+        shortBase = p.dispName;
+    }
+    return shortBase + chSuffix;
+}
+
 let labelButton = doc.select("#label"),
     labelsShown = false;
 function getLabelsLayer() {
@@ -786,7 +818,7 @@ function drawLabels() {
         .attrs({x:0, y:0})
         .style("fill", c => (c.isTarget || (c.p && c.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(c).toString())
         .style("font-size", fontSize + "px")
-        .text(c=>c.id);
+        .text(c => getCurveDisplayLabel(c));
 
     g.datum(function(){return this.getBBox();});
     g.select("text").attrs(b=>({x:3-b.x, y:3-b.y}));
@@ -1233,6 +1265,9 @@ function renderTargetsUI() {
                 }
                 updateDispVals();
                 updateDF(boost, tilt, ear, treble);
+                if (typeof window.trackTargetSelected === "function") {
+                    window.trackTargetSelected(name, "preset");
+                }
             }))
         .order();
 
@@ -1301,6 +1336,9 @@ function renderTargetsUI() {
                 treble = cv.treble;
                 updateDispVals();
                 updateDF(boost, tilt, ear, treble);
+                if (typeof window.trackTargetSelected === "function") {
+                    window.trackTargetSelected(cv.name || "CUSTOM", "saved_custom");
+                }
             });
 
             pill.on("dblclick", function() {
@@ -1364,6 +1402,9 @@ function renderTargetsUI() {
         activeCustomViewId = newCv.id;
         saveCustomViewsState();
         updateDF(boost, tilt, ear, treble);
+        if (typeof window.trackTargetSelected === "function") {
+            window.trackTargetSelected(newCv.name || "CUSTOM", "saved_custom");
+        }
     }
 
     let livePills = refContainer.selectAll("div.target.custom-live-pill")
@@ -2135,9 +2176,6 @@ function setBaseline(b, no_transition) {
     if (typeof window.redrawEQOverlay === "function") { window.redrawEQOverlay(); }
     table.selectAll("tr").select(".button")
         .classed("selected", p => p===baseline.p || (p.basedOn && p.basedOn===baseline.p));
-    
-    // Analytics event
-    if (analyticsEnabled && b.p) { pushPhoneTag("baseline_set", b.p); }
 }
 function getBaseline(p) {
     let b = getAvg(p).map(d => d[1]+getOffset(p));
@@ -2211,7 +2249,7 @@ function setModeEmbed() {
 function updatePaths(trigger) {
     clearLabels();
     let c = d3.merge(activePhones.map(p => p.activeCurves)),
-        p = gpath.selectAll("path").data(c, d=>d.id);
+        p = gpath.selectAll("path").data(c, d => (d.p && d.p.eqSnapshotId ? d.p.eqSnapshotId + ":" : "") + d.id);
     let graphLines = p.join("path").attr("opacity", c=>c.p.hide?0:null)
         .classed("sample", c=>c.p.samp);
     graphLines.attr("stroke", getColor_AC).call(redrawLine);
@@ -2263,6 +2301,8 @@ function updatePaths(trigger) {
     if (stickyLabels) drawLabels();
     if (typeof window.syncGraphHeader === "function") { window.syncGraphHeader(); }
     if (typeof window.refreshCalcBadge === "function") { window.refreshCalcBadge(); }
+    if (typeof window.syncPhoneTableColors === "function") { window.syncPhoneTableColors(); }
+    if (typeof window.syncSavedEQPillColors === "function") { window.syncSavedEQPillColors(); }
     if (typeof window.redrawEQOverlay === "function") { window.redrawEQOverlay(); }
 }
 
@@ -2287,6 +2327,33 @@ let norm_sel = ( default_normalization.toLowerCase() === "db" ) ? 0:1,
     norm_phon = default_norm_db;
 
 function normalizePhone(p) {
+    if (p.isSandboxEQ) {
+        let targetCenter = norm_sel ? 60 : norm_phon;
+        p.norm = targetCenter - 60;
+        return;
+    }
+    if (p.eqParent && p.eqParent.norm !== undefined) {
+        p.norm = p.eqParent.norm;
+        return;
+    }
+    if (p.isEQSnapshot && p.eqBasePhone) {
+        let baseRef = p.eqBasePhone;
+        if (!baseRef.channels && baseRef.rawChannels) {
+            smoothPhone(baseRef);
+        }
+        let refChans = baseRef.channels ? baseRef.channels.filter(c => c !== null) : (p.eqBaseRawChannels ? p.eqBaseRawChannels.filter(c => c !== null) : null);
+        if (refChans && refChans.length) {
+            if (norm_sel) {
+                let i = fr_to_ind(norm_fr);
+                let avg = l => 20*Math.log10(d3.mean(l, d=>Math.pow(10,d/20)));
+                p.norm = 60 - avg(refChans.map(l=>l[i][1]));
+            } else {
+                let refAvg = refChans.length === 1 ? refChans[0] : avgCurves(refChans);
+                p.norm = find_offset(refAvg, norm_phon);
+            }
+            return;
+        }
+    }
     if (norm_sel) { // fr
         let i = fr_to_ind(norm_fr);
         let avg = l => 20*Math.log10(d3.mean(l, d=>Math.pow(10,d/20)));
@@ -2358,6 +2425,7 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
             updatePhoneTable();
         }
     }
+    let wasActiveBeforeShow = !!p.active;
     let keep = !exclusive ? (q=>true)
              : (q => q===p || q.copyOf===p || q.pin || q.isTarget!==p.isTarget || q.isPrefBounds);
     if (!p.rawChannels) {
@@ -2375,7 +2443,6 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
                     if (p.vars) p.vars[p.fileName] = ch;
                     showPhone(p, exclusive, suppressVariant, trigger);
                     if (trigger) { scrollToActive(); }
-                    if (analyticsEnabled) { pushPhoneTag(phone_displayed, p, trigger); }
                 });
             }
             return;
@@ -2393,14 +2460,13 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
             if (p.vars) p.vars[p.fileName] = ch;
             showPhone(p, exclusive, suppressVariant, trigger);
             if (trigger) { scrollToActive(); }
-            if (analyticsEnabled) { pushPhoneTag(phone_displayed, p, trigger); }
         });
         return;
     }
     smoothPhone(p);
     if (p.id === undefined) { p.id = getPhoneNumber(); }
     normalizePhone(p); p.offset=p.offset||0;
-    let isComparePhone = q => !q.isTarget && !q.isPrefBounds && !q.eqParent;
+    let isComparePhone = q => !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot;
     if (exclusive) {
         activePhones.filter(q => !keep(q)).forEach(q => {
             delete q._userChannelOverride;
@@ -2428,7 +2494,7 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         let newTargetSeating = undefined;
         if (!p.isTarget) {
             let ap = activePhones.filter(isComparePhone);
-            if (!p.eqParent) {
+            if (!p.eqParent && !p.isEQSnapshot) {
                 if (ap.length >= 1) {
                     avg = true;
                     // Determine smart channel & seating defaults when comparing with single-channel modes
@@ -2486,14 +2552,14 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
                     window.resetGraphTools();
                 }
             } else {
-                // Attached EQ layer follows single-model AVG default (or L+R when split trims exist),
+                // Attached EQ / Saved EQ layer follows single-model AVG default (or L+R when split trims exist),
                 // while yielding cleanly to R-solo when 2+ comparison headphones are plotted.
                 activePhones.push(p);
                 if (ap.length >= 2) {
                     avg = true;
                 } else {
                     eqDefaultAvg = !p.hasChannelSplits;
-                    if (p.eqParent && p.eqParent.active) {
+                    if (p.eqParent && p.eqParent.active && p.eqParent.eq === p) {
                         setCurves(p.eqParent, eqDefaultAvg, undefined);
                     }
                 }
@@ -2547,6 +2613,18 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         updateEQPhoneSelect();
     }
     if (!p.isTarget && alt_augment ) { augmentList(p); }
+
+    if (trigger !== "config") {
+        if (!p.isTarget && !p.isEQSnapshot && !p.eqParent && (!wasActiveBeforeShow || trigger === "share" || trigger === "embed") && typeof window.trackPhoneViewed === "function") {
+            let viewSource = trigger === "share" ? "share_url"
+                : (trigger === "embed" ? "embed_url" : (p.copyOf ? "variant" : "sidebar"));
+            window.trackPhoneViewed(p, viewSource);
+        } else if (p.isTarget && p.phone !== "Custom Tilt" && (!wasActiveBeforeShow || trigger === "share" || trigger === "embed") && typeof window.trackTargetSelected === "function") {
+            let tSource = trigger === "share" ? "share_url"
+                : (trigger === "embed" ? "embed_url" : "preset");
+            window.trackTargetSelected(p.dispName || p.phone, tSource);
+        }
+    }
     
     // Apply user config view settings
     if (typeof trigger !== "undefined") {
@@ -2558,7 +2636,7 @@ window.syncEQPairChannels = function(basePhone, hasChannelSplits) {
     if (!basePhone || !basePhone.eq || !basePhone.eq.active) return;
     let eqPhone = basePhone.eq;
     eqPhone.hasChannelSplits = !!hasChannelSplits;
-    let comparePhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent);
+    let comparePhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot);
     if (comparePhones.length >= 2) {
         // Respect MIRE multi-headphone R-solo comparison workflow
         return;
@@ -2587,8 +2665,15 @@ function removePhone(p) {
     delete p._userChannelOverride;
     delete p._autoSynced;
     activePhones = activePhones.filter(q => q.active);
+    if (!p.isEQSnapshot) {
+        activePhones.forEach(q => {
+            if (q && q.isEQSnapshot && q.eqParent === p) {
+                q.eqParent = null;
+            }
+        });
+    }
     if (!p.isTarget) {
-        let ap = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent);
+        let ap = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot);
         if (ap.length === 1) {
             let restoreSeat = ap[0]._userChannelOverride ? undefined : "avg";
             delete ap[0]._autoSynced;
@@ -2600,7 +2685,7 @@ function removePhone(p) {
                 setCurves(ap[0], false, undefined, undefined, restoreSeat);
             }
         }
-        if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
+        if (!p.isPrefBounds && !p.eqParent && !p.isEQSnapshot && typeof window.resetGraphTools === "function") {
             window.resetGraphTools();
         }
     }
@@ -2624,6 +2709,9 @@ function removePhone(p) {
         .call(setPhoneTr);
     if (extraEnabled && extraEQEnabled) {
         updateEQPhoneSelect();
+    }
+    if (p.isEQSnapshot && p.eqSnapshotId && typeof window.onEQSnapshotRemoved === "function") {
+        window.onEQSnapshotRemoved(p.eqSnapshotId);
     }
 }
 
@@ -3007,6 +3095,104 @@ Promise.all([
         setBrand(inits[0].brand, true);
     }
 
+    window.loadHeadphoneByMeta = function(meta, callback) {
+        if (typeof callback !== "function") callback = () => {};
+        if (!meta || meta.isSandbox) {
+            callback(null);
+            return;
+        }
+        let matchPhoneObj = (q) => q && !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot &&
+            ((meta.fileName && q.fileName === meta.fileName) ||
+             (meta.key && q.brand && (q.brand.name + " " + q.dispName) === meta.key));
+
+        let activeMatch = activePhones.find(matchPhoneObj);
+        if (activeMatch) {
+            if (activeMatch.rawChannels) {
+                callback(activeMatch);
+            } else {
+                loadFiles(activeMatch, (ch) => {
+                    if (!ch) { callback(null); return; }
+                    activeMatch.rawChannels = ch;
+                    if (activeMatch.vars) activeMatch.vars[activeMatch.fileName] = ch;
+                    callback(activeMatch);
+                });
+            }
+            return;
+        }
+
+        // Search allPhones base entries and variant arrays
+        for (let i = 0; i < allPhones.length; i++) {
+            let p = allPhones[i];
+            if (!p || p.isTarget) continue;
+
+            if (p.fileNames && p.fileNames.length) {
+                let vIdx = -1;
+                if (meta.fileName) {
+                    vIdx = p.fileNames.indexOf(meta.fileName);
+                }
+                if (vIdx === -1 && meta.key && p.dispNames) {
+                    vIdx = p.dispNames.findIndex(dn => p.brand && (p.brand.name + " " + dn) === meta.key);
+                }
+                if (vIdx !== -1) {
+                    let fn = p.fileNames[vIdx];
+                    let dn = (p.dispNames && p.dispNames[vIdx]) ? p.dispNames[vIdx] : fn;
+                    if (vIdx === 0 && !p.active) {
+                        p.fileName = fn;
+                        p.dispName = dn;
+                        if (p.vars && p.vars[fn]) p.rawChannels = p.vars[fn];
+                        if (p.rawChannels) {
+                            showPhone(p, false, true, "preset");
+                            callback(p);
+                        } else {
+                            loadFiles(p, (ch) => {
+                                if (!ch) { callback(null); return; }
+                                p.rawChannels = ch;
+                                if (p.vars) p.vars[fn] = ch;
+                                showPhone(p, false, true, "preset");
+                                callback(p);
+                            });
+                        }
+                        return;
+                    }
+                    let varCopy = { fileName: fn, dispName: dn };
+                    if (p.vars && p.vars[fn]) {
+                        showVariant(p, varCopy, "preset");
+                        callback(varCopy);
+                    } else {
+                        let tmpLoad = { brand: p.brand, fileName: fn, dispName: dn };
+                        loadFiles(tmpLoad, (ch) => {
+                            if (!ch) { callback(null); return; }
+                            if (!p.vars) p.vars = {};
+                            p.vars[fn] = ch;
+                            showVariant(p, varCopy, "preset");
+                            callback(varCopy);
+                        });
+                    }
+                    return;
+                }
+            }
+
+            let isBaseMatch = (meta.fileName && p.fileName === meta.fileName) ||
+                              (meta.key && p.brand && (p.brand.name + " " + p.dispName) === meta.key);
+            if (isBaseMatch) {
+                if (p.rawChannels) {
+                    if (!p.active) showPhone(p, false, true, "preset");
+                    callback(p);
+                } else {
+                    loadFiles(p, (ch) => {
+                        if (!ch) { callback(null); return; }
+                        p.rawChannels = ch;
+                        if (p.vars) p.vars[p.fileName] = ch;
+                        showPhone(p, false, true, "preset");
+                        callback(p);
+                    });
+                }
+                return;
+            }
+        }
+        callback(null);
+    };
+
     // init phone poofing bandaid
     if (ifURL) {
         let lastSig = null, stable = 0, attempts = 0;
@@ -3132,6 +3318,7 @@ Promise.all([
     };
 
     const COMPLETE_NUMBER_INPUT = /^-?(?:\d+\.?\d*|\.\d+)$/;
+    let customTargetTrackTimer = null;
     function bindCusdfInput(selector, setter) {
         doc.select(selector)
             .on("change input", function () {
@@ -3141,6 +3328,15 @@ Promise.all([
                 if (!Number.isFinite(num)) return;
                 setter(num);
                 updateDF(boost, tilt, ear, treble);
+                if (typeof window.trackFeatureUsed === "function") {
+                    window.trackFeatureUsed("custom_target_adjusted");
+                }
+                clearTimeout(customTargetTrackTimer);
+                customTargetTrackTimer = setTimeout(() => {
+                    if (typeof window.trackTargetSelected === "function") {
+                        window.trackTargetSelected("Custom Tilt", "custom_sliders");
+                    }
+                }, 1200);
             })
             .on("blur", function () {
                 updateDispVals();
@@ -3301,11 +3497,11 @@ function pathHL(c, m, imm) {
     }
 }
 function pathTooltip(c, m) {
-    let g = getLabelsLayer().selectAll(".lineLabel").data([c.id])
+    let g = getLabelsLayer().selectAll(".lineLabel").data([c])
         .join("g").attr("class","lineLabel");
     let t = g.append("text")
         .attrs({x:m[0], y:m[1]-6, fill:getTooltipColor(c)})
-        .text(t=>t);
+        .text(d => getCurveDisplayLabel(d));
     let b = t.node().getBBox(),
         o = pad.l+W - b.width;
     if (o < b.x) { t.attr("x",o); b.x=o; }
@@ -3423,13 +3619,13 @@ function renderInspectAt(m, opts) {
             valG.append("text").attrs({ x: -16, "text-anchor": "start" });
         }
 
-        let tt = content.selectAll(".inspectLabel").data(entries.map(d => d.c), d => d.id)
+        let tt = content.selectAll(".inspectLabel").data(entries.map(d => d.c), d => (d.p && d.p.eqSnapshotId ? d.p.eqSnapshotId + ":" : "") + d.id)
             .join(enter => enter.append("g").call(newTooltip))
             .order();
 
         tt.select(".insp_name")
             .style("fill", d => (d.isTarget || (d.p && d.p.isTarget)) ? "var(--graph-target-text, #666666)" : getTooltipColor(d).toString())
-            .text(d => d.id);
+            .text(d => getCurveDisplayLabel(d));
 
         tt.select(".insp_val").selectAll("text")
             .style("fill", function() {
@@ -3535,6 +3731,9 @@ doc.select("#inspector").on("click", function () {
     if (!interactInspect && !(typeof interactCalc !== "undefined" && interactCalc)) {
         stopInspect();
     }
+    if (interactInspect && typeof window.trackFeatureUsed === "function") {
+        window.trackFeatureUsed("inspect_tool");
+    }
 });
 
 let graphInteractRect = gr.append("rect")
@@ -3603,7 +3802,9 @@ function copyUrlInit() {
         }, 600);
         
         // Analytics event
-        if (analyticsEnabled) { pushEventTag("clicked_copyUrl", targetWindow); }
+        if (typeof window.trackGraphExported === "function") {
+            window.trackGraphExported("copy_url");
+        }
     });
 }
 copyUrlInit();
@@ -4029,6 +4230,11 @@ function buildToolPillElement(tool, extraClass) {
     a.rel = "noopener noreferrer";
     a.innerHTML = `<span class="tool-pill-label"></span>${getExternalArrowSvg()}`;
     a.querySelector(".tool-pill-label").textContent = tool.name;
+    a.addEventListener("click", function() {
+        if (typeof window.trackOutboundClick === "function") {
+            window.trackOutboundClick("tool", tool.name, tool.url);
+        }
+    });
     return a;
 }
 
@@ -4046,6 +4252,11 @@ function buildSocialLinkElement(social, showLabel) {
         span.textContent = social.name;
         a.append(span);
     }
+    a.addEventListener("click", function() {
+        if (typeof window.trackOutboundClick === "function") {
+            window.trackOutboundClick("social", social.name, social.url);
+        }
+    });
     return a;
 }
 
@@ -4258,6 +4469,11 @@ function addExternalLinks() {
             linkHtml.setAttribute("href", linkUrl);
             linkHtml.setAttribute("target", "_blank");
             linkHtml.setAttribute("rel", "noopener noreferrer");
+            linkHtml.addEventListener("click", function() {
+                if (typeof window.trackOutboundClick === "function") {
+                    window.trackOutboundClick("resource", linkName, linkUrl);
+                }
+            });
             externalLinksBar.append(linkHtml);
         });
     });

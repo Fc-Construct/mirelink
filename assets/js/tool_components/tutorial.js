@@ -68,7 +68,9 @@ function addTutorial() {
                 disableZoom();
 
                 // Analytics event
-                if (analyticsEnabled) { pushEventTag("tutorial_activated", targetWindow, def.name); }
+                if (typeof window.trackFeatureUsed === "function") {
+                    window.trackFeatureUsed("tutorial_region", def.name);
+                }
             } else {
                 partsPrimary.setAttribute("tutorial-active", "false");
             }

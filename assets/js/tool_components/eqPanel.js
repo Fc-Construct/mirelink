@@ -10,7 +10,8 @@ const SVG_ICON = {
     play:    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 22v-20l18 10-18 10z"/></svg>',
     pause:   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M11 22h-4v-20h4v20zm6-20h-4v20h4v-20z"/></svg>',
     volume:  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M6 7l8-5v20l-8-5v-10zm-6 10h4v-10h-4v10zm20.264-13.264l-1.497 1.497c1.847 1.783 2.983 4.157 2.983 6.767 0 2.61-1.135 4.984-2.983 6.766l1.498 1.498c2.305-2.153 3.735-5.055 3.735-8.264s-1.43-6.11-3.736-8.264zm-.489 8.264c0-2.084-.915-3.967-2.384-5.391l-1.503 1.503c1.011 1.049 1.637 2.401 1.637 3.888 0 1.488-.623 2.841-1.634 3.891l1.503 1.503c1.468-1.424 2.381-3.309 2.381-5.394z"/></svg>',
-    muted:   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M19 7.358v15.642l-8-5v-.785l8-9.857zm3-6.094l-1.548-1.264-3.446 4.247-6.006 3.753v3.646l-2 2.464v-6.11h-4v10h.843l-3.843 4.736 1.548 1.264 18.452-22.736z"/></svg>'
+    muted:   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M19 7.358v15.642l-8-5v-.785l8-9.857zm3-6.094l-1.548-1.264-3.446 4.247-6.006 3.753v3.646l-2 2.464v-6.11h-4v10h.843l-3.843 4.736 1.548 1.264 18.452-22.736z"/></svg>',
+    save:    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>'
 };
 
 const DEFAULT_EQ_FILTERS = [
@@ -47,7 +48,9 @@ function addExtra() {
         document.querySelector("div.select > div.selector-panel").style["display"] = "none";
         document.querySelector("div.select > div.extra-panel").style["display"] = "flex";
         document.querySelector("div.select").setAttribute("data-selected", "extra");
-        if (analyticsEnabled) { pushEventTag("clicked_equalizerTab", targetWindow); }
+        if (typeof window.trackFeatureUsed === "function") {
+            window.trackFeatureUsed("eq_tab");
+        }
     };
     window.hideExtraPanel = (selectedList) => {
         document.querySelector("div.select > div.selector-panel").style["display"] = "flex";
@@ -336,6 +339,7 @@ function addExtra() {
     let eqOverlayEnabled = false;
     let eqOverlayUserDismissed = false;
     let eqOverlayUserEnabled = false;
+    let activeEditingPresetId = null;
     let fftEnabled = true;
     let fftStyle = "bars"; // "bars" | "wave"
     let fftMode = "post";  // "post" | "pre"
@@ -563,27 +567,42 @@ function addExtra() {
 
     function syncEQOverlayColors() {
         if (typeof document === "undefined" || typeof d3 === "undefined") return;
-        let phoneSelected = eqPhoneSelect ? eqPhoneSelect.value : "";
         let phonesList = (typeof activePhones !== "undefined" && Array.isArray(activePhones)) ? activePhones : [];
-        let basePhone = phoneSelected && phonesList.find(
-            p => !p.isPrefBounds && !p.isTarget && (p.brand.name + " " + p.dispName === phoneSelected)
-        );
-        let eqPhone = (basePhone && basePhone.eq && basePhone.eq.active)
-            ? basePhone.eq
-            : phonesList.find(p => p.eqParent && p.active);
+        let eqPhone = null;
 
-        let hclColor = null;
-        if (eqPhone && typeof getCurveColor === "function") {
-            hclColor = getCurveColor(eqPhone.id, 0, eqPhone.hexColor, { p: eqPhone });
-            if (typeof color_curveToText === "function") {
-                hclColor = color_curveToText(hclColor);
+        if (activeEditingPresetId) {
+            eqPhone = phonesList.find(p => p && p.isEQSnapshot && p.eqSnapshotId === activeEditingPresetId && p.active) || null;
+        }
+        if (!eqPhone) {
+            let phoneSelected = eqPhoneSelect ? eqPhoneSelect.value : "";
+            let basePhone = phoneSelected && phonesList.find(
+                p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName === phoneSelected)
+            );
+            if (basePhone && basePhone.eq && basePhone.eq.active) {
+                eqPhone = basePhone.eq;
             }
-        } else if (typeof curatedPalette !== "undefined" && curatedPalette.length > 1) {
-            hclColor = curatedPalette[1];
+        }
+        if (!eqPhone) {
+            eqPhone = phonesList.find(p => p && p.eqParent && p.eqParent.eq === p && p.active && !p.isEQSnapshot) || null;
+        }
+        if (!eqPhone) {
+            eqPhone = phonesList.find(p => p && p.isEQSnapshot && p.active) || null;
         }
 
-        if (!hclColor) return;
-        let rgb = d3.rgb(hclColor);
+        let baseHcl = null;
+        if (eqPhone && typeof getCurveColor === "function") {
+            baseHcl = getCurveColor(eqPhone.id, 0, eqPhone.hexColor, { p: eqPhone });
+        } else if (typeof curatedPalette !== "undefined" && curatedPalette.length) {
+            let activeDataCount = phonesList.filter(q => q && !q.isTarget && !q.isPrefBounds).length;
+            baseHcl = curatedPalette[activeDataCount % curatedPalette.length];
+        }
+
+        if (!baseHcl) return;
+        let h = isNaN(baseHcl.h) ? 245 : baseHcl.h;
+        let c = isNaN(baseHcl.c) ? 75 : baseHcl.c;
+        let l = isNaN(baseHcl.l) ? 68 : baseHcl.l;
+        let lighterHcl = d3.hcl(h, Math.max(25, c * 0.92), Math.min(86, l + 10));
+        let rgb = d3.rgb(lighterHcl);
         if (!rgb || isNaN(rgb.r)) return;
 
         let r = Math.round(Math.max(0, Math.min(255, rgb.r)));
@@ -592,9 +611,9 @@ function addExtra() {
         let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
         let rootStyle = document.documentElement.style;
         rootStyle.setProperty("--eq-overlay-color", `rgb(${r}, ${g}, ${b})`);
-        rootStyle.setProperty("--eq-overlay-fill", `rgba(${r}, ${g}, ${b}, 0.10)`);
-        rootStyle.setProperty("--eq-overlay-ref", `rgba(${r}, ${g}, ${b}, 0.36)`);
-        rootStyle.setProperty("--eq-handle-text", lum > 150 ? "#111111" : "#ffffff");
+        rootStyle.setProperty("--eq-overlay-fill", `rgba(${r}, ${g}, ${b}, 0.055)`);
+        rootStyle.setProperty("--eq-overlay-ref", `rgba(${r}, ${g}, ${b}, 0.24)`);
+        rootStyle.setProperty("--eq-handle-text", lum > 145 ? "#111111" : "#ffffff");
     }
 
     let hoveredBandIdx = null;
@@ -847,6 +866,9 @@ function addExtra() {
             let nextFreq = x.invert(dragState.curPx[0]);
             let nextGain = y.invert(dragState.curPx[1]) - center;
             applyHandleValues(dragState.bandIdx, nextFreq, nextGain, null);
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("eq_handle_used");
+            }
         };
 
         const onWindowPointerUp = (ev) => finishActiveDrag(ev);
@@ -924,6 +946,9 @@ function addExtra() {
             activeDragIdx = null;
             hoveredBandIdx = null;
             applyHandleValues(bandIdx, null, 0, null);
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("eq_handle_used");
+            }
         });
 
         layerNode.addEventListener("wheel", (ev) => {
@@ -941,6 +966,9 @@ function addExtra() {
             hoveredBandIdx = bandIdx;
             clearTimeout(wheelTipTimer);
             applyHandleValues(bandIdx, null, null, nextQ);
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("eq_handle_used");
+            }
         }, { passive: false });
     }
 
@@ -1048,6 +1076,9 @@ function addExtra() {
         }
         hoveredBandIdx = targetIdx;
         applyHandleValues(targetIdx, nextFreq, nextGain, 1);
+        if (typeof window.trackFeatureUsed === "function") {
+            window.trackFeatureUsed("eq_handle_used");
+        }
         clearTimeout(wheelTipTimer);
         wheelTipTimer = setTimeout(() => {
             if (activeDragIdx === null && hoveredBandIdx === targetIdx) {
@@ -1231,6 +1262,7 @@ function addExtra() {
             " | Shared Clip Guard: " + fmtDb(state.sharedSafetyDb);
     }
 
+    let userExplicitlyPickedSandbox = false;
     let applyEQHandle = null;
     let applyEQUseRaf = false;
     let applyEQExec = (skipRedraw) => {
@@ -1239,7 +1271,44 @@ function addExtra() {
         let anyActive = hasAnyActiveFilters(false);
         let hasSplits = hasChannelTrimFilters(true);
 
-        if (anyActive && !phoneSelected) {
+        if (activeEditingPresetId) {
+            let editingPreset = savedEQPresets.find(x => x.id === activeEditingPresetId);
+            let editingSnap = editingPreset ? findActiveSnapshotCurve(editingPreset.id) : null;
+            if (editingPreset && editingSnap) {
+                activePhones
+                    .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
+                    .forEach(q => removePhone(q));
+
+                let selectedPhoneObj = phoneSelected && activePhones.filter(
+                    p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
+
+                let previewBasePhone = selectedPhoneObj
+                    || (!userExplicitlyPickedSandbox && !editingSnap.isSandboxEQ && editingSnap.eqBasePhone ? editingSnap.eqBasePhone : null);
+
+                let draftPreset = {
+                    id: editingPreset.id,
+                    name: editingPreset.name,
+                    scopes: {
+                        LR: getScopeFilters("LR", true, true),
+                        L: getScopeFilters("L", true, true),
+                        R: getScopeFilters("R", true, true)
+                    },
+                    balance: getCurrentChannelBalanceValue(),
+                    model: captureCurrentModelMeta(previewBasePhone)
+                };
+                mountSnapshotCurve(draftPreset, previewBasePhone, isBypassed);
+                updatePreampDisplay();
+                if (!skipRedraw) {
+                    drawEQOverlay(0);
+                } else {
+                    syncEQOverlayColors();
+                }
+                return;
+            }
+            activeEditingPresetId = null;
+        }
+
+        if (anyActive && !phoneSelected && !userExplicitlyPickedSandbox) {
             let firstPhone = eqPhoneSelect.querySelectorAll("option")[1];
             if (firstPhone) {
                 phoneSelected = eqPhoneSelect.value = firstPhone.value;
@@ -1247,7 +1316,7 @@ function addExtra() {
         }
 
         let phoneObj = phoneSelected && activePhones.filter(
-            p => !p.isPrefBounds && p.brand.name + " " + p.dispName == phoneSelected)[0];
+            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
 
         if (phoneObj && (anyActive || (phoneObj.eq && phoneObj.eq.active))) {
             let channels = applyChannelFiltersToPhone(phoneObj, false);
@@ -1327,6 +1396,9 @@ function addExtra() {
         updateScopeIndicators();
 
         let hasConfigured = hasAnyActiveFilters(true);
+        if (hasConfigured && typeof window.trackFeatureUsed === "function") {
+            window.trackFeatureUsed("eq_adjusted");
+        }
         if (hasConfigured && !eqOverlayEnabled && !eqOverlayUserDismissed) {
             eqOverlayEnabled = true;
             syncEqOverlayButton();
@@ -1343,7 +1415,9 @@ function addExtra() {
     window.updateEQPhoneSelect = () => {
         let oldValue = eqPhoneSelect.value;
         let optionValues = activePhones.filter(p =>
-            !p.isPrefBounds && !p.isTarget && !p.dispName.match(/ EQ( Saved \d+)?$/)).map(p => p.brand.name + " " + p.dispName);
+            !p.isPrefBounds && !p.isTarget && !p.eqParent && !p.isEQSnapshot &&
+            (!p.dispName || !p.dispName.match(/ EQ( Saved \d+)?$/))
+        ).map(p => (p.brand && p.brand.name ? p.brand.name + " " : "") + p.dispName);
         Array.from(eqPhoneSelect.children).slice(1).forEach(c => eqPhoneSelect.removeChild(c));
         optionValues.forEach(value => {
             let optionElem = document.createElement("option");
@@ -1351,13 +1425,35 @@ function addExtra() {
             optionElem.innerText = value;
             eqPhoneSelect.appendChild(optionElem);
         });
-        eqPhoneSelect.value = (optionValues.indexOf(oldValue) >= 0) ? oldValue : "";
+        if (userExplicitlyPickedSandbox && oldValue === "") {
+            eqPhoneSelect.value = "";
+        } else {
+            eqPhoneSelect.value = (optionValues.indexOf(oldValue) >= 0) ? oldValue : "";
+            if (!eqPhoneSelect.value && oldValue !== "") {
+                userExplicitlyPickedSandbox = false;
+            }
+        }
         syncEQOverlayColors();
     };
 
     // Initialize clean 8-band rack on startup
     resetDefaultFilters();
-    eqPhoneSelect.addEventListener("input", applyEQ);
+    eqPhoneSelect.addEventListener("input", () => {
+        if (!eqPhoneSelect.value) {
+            userExplicitlyPickedSandbox = true;
+            activePhones
+                .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
+                .forEach(q => removePhone(q));
+        } else {
+            userExplicitlyPickedSandbox = false;
+            let selectedKey = eqPhoneSelect.value;
+            activePhones
+                .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot &&
+                    (!q.eqParent.brand || (q.eqParent.brand.name + " " + q.eqParent.dispName) !== selectedKey))
+                .forEach(q => removePhone(q));
+        }
+        applyEQ();
+    });
 
     // Add new filter in current scope
     document.querySelector("div.extra-eq button.add-filter").addEventListener("click", () => {
@@ -1391,6 +1487,9 @@ function addExtra() {
     // Non-destructive master bypass toggle
     disableFiltersBtn.addEventListener("click", () => {
         setBypassState(!isBypassed, true);
+        if (typeof window.trackFeatureUsed === "function") {
+            window.trackFeatureUsed("eq_bypass");
+        }
     });
 
     // Reset all scopes back to clean 8-band standard rack (all 0.0 dB)
@@ -1402,25 +1501,740 @@ function addExtra() {
         });
     }
 
-    // Save filters as a separate comparable snapshot curve
-    let savedCounter = 1;
-    document.querySelector("div.extra-eq button.save-filters").addEventListener("click", () => {
-        let phoneSelected = eqPhoneSelect.value;
-        let phoneObj = phoneSelected && activePhones.filter(
-            p => !p.isPrefBounds && p.brand.name + " " + p.dispName == phoneSelected)[0];
-        if (!phoneObj || !hasAnyActiveFilters(true)) {
-            alert("Please select model and add at least one active non-zero filter before saving.");
+    // -------------------- Unified Saved Custom EQ Presets (Sidebar + Bottom Table + Sandbox) -------------------- //
+    const SAVED_EQ_STORAGE_KEY = "mirelink_saved_eq_v1";
+    let savedEQPresets = [];
+    let customEqCounter = 1;
+    let eqSavedSectionEl = document.querySelector("div.extra-eq div.eq-saved-section");
+    let eqSavedListEl = document.querySelector("div.extra-eq div.eq-saved-list");
+
+    function cloneFilterArray(list) {
+        if (!Array.isArray(list) || !list.length) return cloneDefaultFilters();
+        return list.map(f => ({
+            type: f && f.type ? String(f.type) : "PK",
+            freq: Number.isFinite(Number(f && f.freq)) ? Number(f.freq) : 1000,
+            gain: Number.isFinite(Number(f && f.gain)) ? Number(f.gain) : 0,
+            q: Number.isFinite(Number(f && f.q)) ? Number(f.q) : 1.0,
+            disabled: !!(f && f.disabled)
+        }));
+    }
+
+    function syncCustomEqCounterFloor() {
+        let minNext = 1;
+        savedEQPresets.forEach(p => {
+            let m = String(p.name || "").match(/^CUSTOM\s+EQ\s+(\d+)$/i);
+            if (m) {
+                let n = parseInt(m[1], 10);
+                if (Number.isFinite(n) && n >= minNext) minNext = n + 1;
+            }
+        });
+        if (customEqCounter < minNext) {
+            customEqCounter = minNext;
+        }
+    }
+
+    function loadSavedEQState() {
+        try {
+            let raw = window.localStorage ? window.localStorage.getItem(SAVED_EQ_STORAGE_KEY) : null;
+            if (!raw) return;
+            let parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.presets)) {
+                savedEQPresets = parsed.presets
+                    .filter(p => p && typeof p.id === "string")
+                    .map((p, idx) => ({
+                        id: String(p.id),
+                        name: String(p.name || ("CUSTOM EQ " + (idx + 1))).trim() || ("CUSTOM EQ " + (idx + 1)),
+                        scopes: {
+                            LR: cloneFilterArray(p.scopes && p.scopes.LR),
+                            L: cloneFilterArray(p.scopes && p.scopes.L),
+                            R: cloneFilterArray(p.scopes && p.scopes.R)
+                        },
+                        balance: Number.isFinite(Number(p.balance)) ? Math.max(-10, Math.min(10, Number(p.balance))) : 0,
+                        model: (p.model && !p.model.isSandbox) ? {
+                            isSandbox: false,
+                            key: String(p.model.key || ""),
+                            brandName: String(p.model.brandName || ""),
+                            phoneName: String(p.model.phoneName || ""),
+                            dispName: String(p.model.dispName || ""),
+                            fileName: String(p.model.fileName || "")
+                        } : {
+                            isSandbox: true,
+                            key: "",
+                            brandName: "",
+                            phoneName: "",
+                            dispName: "",
+                            fileName: ""
+                        }
+                    }));
+            }
+            if (parsed && Number.isFinite(Number(parsed.counter))) {
+                customEqCounter = Math.max(1, Math.floor(Number(parsed.counter)));
+            }
+        } catch (_) {}
+        syncCustomEqCounterFloor();
+    }
+
+    function persistSavedEQState() {
+        syncCustomEqCounterFloor();
+        try {
+            if (window.localStorage) {
+                window.localStorage.setItem(SAVED_EQ_STORAGE_KEY, JSON.stringify({
+                    counter: customEqCounter,
+                    presets: savedEQPresets
+                }));
+            }
+        } catch (_) {}
+    }
+
+    function buildActiveChannelFilterList(scopesObj, channel) {
+        const clean = (list) => (list || [])
+            .filter(f => f && !f.disabled && f.type && f.freq && f.q && f.gain)
+            .map(f => Object.assign({}, f));
+        let shared = clean(scopesObj.LR);
+        if (channel === "L") return shared.concat(clean(scopesObj.L));
+        if (channel === "R") return shared.concat(clean(scopesObj.R));
+        return shared;
+    }
+
+    function hasSplitsInScopes(scopesObj) {
+        if (!scopesObj) return false;
+        const hasAny = (list) => (list || []).some(f => f && !f.disabled && f.type && f.freq && f.q && f.gain);
+        return hasAny(scopesObj.L) || hasAny(scopesObj.R);
+    }
+
+    function buildSnapshotChannels(phoneObj, scopesObj, respectBypass) {
+        let ignoreByp = !respectBypass;
+        let totalL = (respectBypass && isBypassed) ? [] : buildActiveChannelFilterList(scopesObj, "L");
+        let totalR = (respectBypass && isBypassed) ? [] : buildActiveChannelFilterList(scopesObj, "R");
+        let totalLR = (respectBypass && isBypassed) ? [] : buildActiveChannelFilterList(scopesObj, "LR");
+        let raw = (phoneObj && phoneObj.rawChannels && phoneObj.rawChannels.length) ? phoneObj.rawChannels : null;
+        if (raw) {
+            let lrLen = (typeof LR !== "undefined" && LR.length) ? LR.length : 2;
+            if (raw.length >= 2 && lrLen > 1) {
+                let nSeatings = Math.floor(raw.length / lrLen);
+                return raw.map((c, idx) => {
+                    if (!c) return null;
+                    let filt = (idx < nSeatings) ? totalL : totalR;
+                    return Equalizer.apply(c, filt);
+                });
+            }
+            return raw.map(c => c ? Equalizer.apply(c, totalLR) : null);
+        }
+        let freqs = (typeof f_values !== "undefined") ? f_values : Equalizer.GraphicEQRawFrequences;
+        let flat = freqs.map(f => [f, 60]);
+        return [
+            Equalizer.apply(flat, totalL),
+            Equalizer.apply(flat, totalR)
+        ];
+    }
+
+    function findActiveSnapshotCurve(presetId) {
+        if (!presetId || typeof activePhones === "undefined") return null;
+        return activePhones.find(p => p && p.isEQSnapshot && p.eqSnapshotId === presetId) || null;
+    }
+
+    function getCurrentChannelBalanceValue() {
+        let slider = document.querySelector("div.settings-row input[name='balance-vol']");
+        if (!slider) return 0;
+        let v = parseFloat(slider.value);
+        return Number.isFinite(v) ? Math.max(-10, Math.min(10, v)) : 0;
+    }
+
+    function captureCurrentModelMeta(phoneObj) {
+        if (!phoneObj) {
+            return { isSandbox: true, key: "", brandName: "", phoneName: "", dispName: "", fileName: "" };
+        }
+        return {
+            isSandbox: false,
+            key: (phoneObj.brand && phoneObj.brand.name ? phoneObj.brand.name + " " : "") + (phoneObj.dispName || phoneObj.phone || ""),
+            brandName: (phoneObj.brand && phoneObj.brand.name) ? String(phoneObj.brand.name) : "",
+            phoneName: String(phoneObj.phone || ""),
+            dispName: String(phoneObj.dispName || phoneObj.phone || ""),
+            fileName: String(phoneObj.fileName || "")
+        };
+    }
+
+    function getPresetModelSubLabel(preset) {
+        if (!preset || !preset.model || preset.model.isSandbox) return "Sandbox";
+        return preset.model.dispName || preset.model.key || preset.model.phoneName || "Headphone";
+    }
+
+    function getSnapshotBrandLabel(preset, phoneObj) {
+        if (!preset || !preset.model || preset.model.isSandbox || !phoneObj) return "Sandbox";
+        let dispBrand = (phoneObj.dispBrand || (phoneObj.brand && phoneObj.brand.name) || "").trim();
+        let dispName = (phoneObj.dispName || phoneObj.phone || "").trim();
+        return (dispBrand && dispName) ? (dispBrand + " " + dispName) : (dispName || dispBrand || "Headphone");
+    }
+
+    function getSnapshotBaseMeta(preset, phoneObj) {
+        if (!preset || !preset.model || preset.model.isSandbox || !phoneObj) {
+            return { isSandbox: true, baseBrand: "", baseModel: "Sandbox", baseKey: "" };
+        }
+        let baseBrand = (phoneObj.dispBrand || (phoneObj.brand && phoneObj.brand.name) || (preset.model && preset.model.brandName) || "").trim();
+        let baseModel = (phoneObj.dispName || phoneObj.phone || (preset.model && preset.model.dispName) || "").trim();
+        let baseKey = (baseBrand ? (baseBrand + " " + baseModel).trim() : baseModel).trim();
+        return { isSandbox: false, baseBrand, baseModel, baseKey };
+    }
+
+    function resolvePhoneObjSynchronouslyByMeta(meta) {
+        if (!meta || meta.isSandbox) return null;
+        let isMatch = (q) => q && !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot &&
+            ((meta.fileName && q.fileName === meta.fileName) ||
+             (meta.key && q.brand && (q.brand.name + " " + q.dispName) === meta.key));
+        if (typeof activePhones !== "undefined") {
+            let act = activePhones.find(isMatch);
+            if (act && act.rawChannels) return act;
+        }
+        if (typeof allPhones !== "undefined") {
+            let p = allPhones.find(isMatch);
+            if (p && p.rawChannels) return p;
+        }
+        return null;
+    }
+
+    function mountSnapshotCurve(preset, phoneObj, respectBypass) {
+        let isSandbox = !phoneObj || !!(preset.model && preset.model.isSandbox);
+        let channels = buildSnapshotChannels(isSandbox ? null : phoneObj, preset.scopes, !!respectBypass);
+        let splits = hasSplitsInScopes(preset.scopes);
+        let brandLabel = getSnapshotBrandLabel(preset, isSandbox ? null : phoneObj);
+        let baseMeta = getSnapshotBaseMeta(preset, isSandbox ? null : phoneObj);
+        let existing = findActiveSnapshotCurve(preset.id);
+        let activeParent = (!isSandbox && phoneObj && phoneObj.active) ? phoneObj : null;
+
+        if (existing) {
+            let prevSplits = !!existing.hasChannelSplits;
+            existing.isSandboxEQ = isSandbox;
+            existing.eqParent = activeParent;
+            existing.eqBasePhone = isSandbox ? null : phoneObj;
+            existing.eqBaseRawChannels = isSandbox ? null : phoneObj.rawChannels;
+            existing.eqBaseBrand = baseMeta.baseBrand;
+            existing.eqBaseModel = baseMeta.baseModel;
+            existing.eqBaseKey = baseMeta.baseKey;
+            existing.brand = { name: isSandbox ? "Sandbox" : (phoneObj.brand && phoneObj.brand.name ? phoneObj.brand.name : "Custom EQ") };
+            existing.dispBrand = brandLabel;
+            existing.dispName = preset.name;
+            existing.phone = preset.name;
+            existing.fullName = brandLabel + " " + preset.name;
+            existing.rawChannels = channels;
+            existing.sampleLabels = isSandbox ? null : phoneObj.sampleLabels;
+            existing.sampleSeatings = isSandbox ? null : phoneObj.sampleSeatings;
+            existing.hasChannelSplits = splits;
+            existing.smooth = null;
+            smoothPhone(existing);
+            normalizePhone(existing);
+            let wantAvg;
+            if (prevSplits !== splits && !existing._userChannelOverride) {
+                let comparePhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot);
+                wantAvg = (comparePhones.length >= 2) ? false : !splits;
+            }
+            setCurves(existing, wantAvg);
+            if (typeof table !== "undefined") {
+                let tr = table.selectAll("tr").filter(q => q === existing);
+                tr.select("span.brand").text(brandLabel);
+                tr.select("div.phonename").text(preset.name);
+            }
+            updatePaths("preset");
+            updatePhoneTable();
+            return existing;
+        }
+
+        let snapshotObj = {
+            brand: { name: isSandbox ? "Sandbox" : (phoneObj.brand && phoneObj.brand.name ? phoneObj.brand.name : "Custom EQ") },
+            dispBrand: brandLabel,
+            phone: preset.name,
+            dispName: preset.name,
+            fullName: brandLabel + " " + preset.name,
+            fileName: "__eq_snapshot__" + preset.id,
+            rawChannels: channels,
+            sampleLabels: isSandbox ? null : phoneObj.sampleLabels,
+            sampleSeatings: isSandbox ? null : phoneObj.sampleSeatings,
+            isDynamic: true,
+            isEQSnapshot: true,
+            eqSnapshotId: preset.id,
+            isSandboxEQ: isSandbox,
+            eqParent: activeParent,
+            eqBasePhone: isSandbox ? null : phoneObj,
+            eqBaseRawChannels: isSandbox ? null : phoneObj.rawChannels,
+            eqBaseBrand: baseMeta.baseBrand,
+            eqBaseModel: baseMeta.baseModel,
+            eqBaseKey: baseMeta.baseKey,
+            hasChannelSplits: splits
+        };
+        showPhone(snapshotObj, false, true, "preset");
+        return snapshotObj;
+    }
+
+    function revertPresetCurveToSaved(preset) {
+        if (!preset) return;
+        let existing = findActiveSnapshotCurve(preset.id);
+        if (!existing) return;
+        if (!preset.model || preset.model.isSandbox) {
+            mountSnapshotCurve(preset, null, false);
             return;
         }
-        let channels = applyChannelFiltersToPhone(phoneObj, true);
-        let phoneEQ = { name: phoneObj.dispName + " EQ Saved " + savedCounter };
-        let phoneObjEQ = addOrUpdatePhone(phoneObj.brand, phoneEQ, channels);
-        phoneObjEQ.eqParent = phoneObj;
-        phoneObjEQ.sampleLabels = phoneObj.sampleLabels;
-        phoneObjEQ.sampleSeatings = phoneObj.sampleSeatings;
-        phoneObjEQ.hasChannelSplits = hasChannelTrimFilters(true);
-        showPhone(phoneObjEQ, false);
-        savedCounter++;
+        let cachedPhone = resolvePhoneObjSynchronouslyByMeta(preset.model);
+        if (!cachedPhone && existing.eqBasePhone && existing.eqBasePhone.rawChannels) {
+            let baseKey = (existing.eqBasePhone.brand && existing.eqBasePhone.brand.name ? existing.eqBasePhone.brand.name + " " : "") + (existing.eqBasePhone.dispName || "");
+            if ((preset.model.fileName && existing.eqBasePhone.fileName === preset.model.fileName) ||
+                (preset.model.key && baseKey === preset.model.key)) {
+                cachedPhone = existing.eqBasePhone;
+            }
+        }
+        if (cachedPhone) {
+            mountSnapshotCurve(preset, cachedPhone, false);
+        } else if (typeof window.loadHeadphoneByMeta === "function") {
+            window.loadHeadphoneByMeta(preset.model, (phoneObj) => {
+                mountSnapshotCurve(preset, phoneObj || null, false);
+            });
+        }
+    }
+
+    function syncSnapshotCurveName(preset) {
+        let existing = findActiveSnapshotCurve(preset.id);
+        if (!existing) return;
+        let brandLabel = existing.dispBrand || "Sandbox";
+        existing.phone = preset.name;
+        existing.dispName = preset.name;
+        existing.fullName = brandLabel + " " + preset.name;
+        if (typeof table !== "undefined") {
+            let tr = table.selectAll("tr").filter(q => q === existing);
+            tr.select("div.phonename").text(preset.name);
+        }
+        setCurves(existing);
+        updatePaths("preset");
+    }
+
+    function syncSavedEQPillColors() {
+        if (!eqSavedListEl) return;
+        let pills = eqSavedListEl.querySelectorAll("div.eq-preset-pill[data-eq-id]");
+        pills.forEach(pill => {
+            let id = pill.getAttribute("data-eq-id");
+            let snap = findActiveSnapshotCurve(id);
+            let isEditing = (activeEditingPresetId === id && !!snap);
+            pill.classList.toggle("is-active", !!snap);
+            pill.classList.toggle("is-editing", isEditing);
+            let dot = pill.querySelector("span.eq-pill-dot");
+            if (dot) {
+                if (snap && typeof getColor_AC === "function" && typeof d3 !== "undefined") {
+                    let col = d3.rgb(getColor_AC({ p: snap })).toString();
+                    dot.style.setProperty("--eq-dot-color", col);
+                    dot.style.backgroundColor = col;
+                    dot.style.borderColor = col;
+                } else {
+                    dot.style.removeProperty("--eq-dot-color");
+                    dot.style.backgroundColor = "";
+                    dot.style.borderColor = "";
+                }
+            }
+        });
+    }
+    window.syncSavedEQPillColors = syncSavedEQPillColors;
+
+    function startPillRename(labelEl, currentName, onSave, onCancel) {
+        let input = document.createElement("input");
+        input.type = "text";
+        input.className = "eq-pill-rename-input";
+        input.value = currentName;
+        labelEl.innerHTML = "";
+        labelEl.appendChild(input);
+        input.focus();
+        input.select();
+
+        let finished = false;
+        const commit = () => {
+            if (finished) return;
+            finished = true;
+            let val = input.value.trim();
+            onSave(val || currentName);
+        };
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+            } else if (e.key === "Escape") {
+                e.preventDefault();
+                finished = true;
+                onCancel();
+            }
+        });
+        input.addEventListener("blur", commit);
+        input.addEventListener("click", (e) => e.stopPropagation());
+        input.addEventListener("dblclick", (e) => e.stopPropagation());
+    }
+
+    function applyPresetValuesToEditor(preset) {
+        scopeFilters.LR = cloneFilterArray(preset.scopes && preset.scopes.LR);
+        scopeFilters.L = cloneFilterArray(preset.scopes && preset.scopes.L);
+        scopeFilters.R = cloneFilterArray(preset.scopes && preset.scopes.R);
+        filtersToElem(scopeFilters[eqScope] || scopeFilters.LR);
+        applyChannelBalance(preset.balance || 0);
+        setBypassState(false, false);
+        eqOverlayUserDismissed = false;
+        eqOverlayEnabled = true;
+        syncEqOverlayButton();
+        updateScopeIndicators();
+        updatePreampDisplay();
+        updateAudioFilters();
+        document.dispatchEvent(new CustomEvent("UpdateExtensionFilters", { detail: { filters: elemToFilters(false, false) } }));
+    }
+
+    function focusPlottedPreset(preset) {
+        if (!preset) return;
+        let existing = findActiveSnapshotCurve(preset.id);
+        if (!existing) {
+            activateSavedPreset(preset);
+            return;
+        }
+        flushPendingApplyEQ();
+        activePhones
+            .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
+            .forEach(q => removePhone(q));
+
+        if (activeEditingPresetId && activeEditingPresetId !== preset.id) {
+            let prevPreset = savedEQPresets.find(x => x.id === activeEditingPresetId);
+            if (prevPreset) revertPresetCurveToSaved(prevPreset);
+        }
+
+        activeEditingPresetId = preset.id;
+        applyPresetValuesToEditor(preset);
+
+        if (existing.isSandboxEQ) {
+            userExplicitlyPickedSandbox = true;
+            eqPhoneSelect.value = "";
+        } else {
+            let matchingActive = (existing.eqParent && existing.eqParent.active) ? existing.eqParent : null;
+            if (!matchingActive && existing.eqBaseKey) {
+                matchingActive = activePhones.find(p =>
+                    p && !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && !p.eqParent && p.brand &&
+                    (p.brand.name + " " + p.dispName) === existing.eqBaseKey
+                ) || null;
+            }
+            updateEQPhoneSelect();
+            if (matchingActive && matchingActive.brand) {
+                userExplicitlyPickedSandbox = false;
+                eqPhoneSelect.value = matchingActive.brand.name + " " + matchingActive.dispName;
+            } else {
+                userExplicitlyPickedSandbox = false;
+                eqPhoneSelect.value = "";
+            }
+        }
+        drawEQOverlay(0);
+        renderSavedEQList();
+    }
+
+    function activateSavedPreset(preset) {
+        if (!preset) return;
+        flushPendingApplyEQ();
+
+        activePhones
+            .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
+            .forEach(q => removePhone(q));
+
+        if (activeEditingPresetId && activeEditingPresetId !== preset.id) {
+            let prevPreset = savedEQPresets.find(x => x.id === activeEditingPresetId);
+            if (prevPreset) revertPresetCurveToSaved(prevPreset);
+        }
+
+        activeEditingPresetId = preset.id;
+        applyPresetValuesToEditor(preset);
+
+        if (!preset.model || preset.model.isSandbox || typeof window.loadHeadphoneByMeta !== "function") {
+            userExplicitlyPickedSandbox = true;
+            eqPhoneSelect.value = "";
+            mountSnapshotCurve(preset, null, false);
+            drawEQOverlay(0);
+            renderSavedEQList();
+            return;
+        }
+
+        userExplicitlyPickedSandbox = false;
+        window.loadHeadphoneByMeta(preset.model, (phoneObj) => {
+            if (!phoneObj) {
+                if (typeof showGraphNotice === "function") {
+                    showGraphNotice("Headphone not found (" + (preset.model.key || preset.model.dispName || "Unknown") + "). Loaded filters in Sandbox.");
+                }
+                userExplicitlyPickedSandbox = true;
+                eqPhoneSelect.value = "";
+                mountSnapshotCurve(preset, null, false);
+                drawEQOverlay(0);
+                renderSavedEQList();
+                return;
+            }
+            updateEQPhoneSelect();
+            let selectKey = (phoneObj.brand && phoneObj.brand.name ? phoneObj.brand.name + " " : "") + phoneObj.dispName;
+            eqPhoneSelect.value = selectKey;
+            mountSnapshotCurve(preset, phoneObj, false);
+            drawEQOverlay(0);
+            renderSavedEQList();
+        });
+    }
+
+    function deselectSavedPreset(preset) {
+        if (!preset) return;
+        let existing = findActiveSnapshotCurve(preset.id);
+        if (existing) {
+            removePhone(existing);
+        } else {
+            if (activeEditingPresetId === preset.id) {
+                activeEditingPresetId = null;
+                drawEQOverlay(0);
+            }
+            renderSavedEQList();
+        }
+    }
+
+    function overwriteSavedPreset(preset, saveBtnEl) {
+        if (!preset) return;
+        saveCurrentScopeDOM();
+        let balanceVal = getCurrentChannelBalanceValue();
+        if (!hasAnyActiveFilters(true) && Math.abs(balanceVal) < 0.01) {
+            if (typeof showGraphNotice === "function") {
+                showGraphNotice("Add an EQ filter or channel balance before overwriting.");
+            }
+            return;
+        }
+        let phoneSelected = eqPhoneSelect.value;
+        let phoneObj = phoneSelected && activePhones.filter(
+            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
+
+        if (!phoneObj && !userExplicitlyPickedSandbox && activeEditingPresetId === preset.id) {
+            let activeSnap = findActiveSnapshotCurve(preset.id);
+            if (activeSnap && !activeSnap.isSandboxEQ && activeSnap.eqBasePhone) {
+                phoneObj = activeSnap.eqBasePhone;
+            }
+        }
+
+        preset.scopes = {
+            LR: cloneFilterArray(scopeFilters.LR),
+            L: cloneFilterArray(scopeFilters.L),
+            R: cloneFilterArray(scopeFilters.R)
+        };
+        preset.balance = balanceVal;
+        preset.model = captureCurrentModelMeta(phoneObj || null);
+        persistSavedEQState();
+
+        if (findActiveSnapshotCurve(preset.id)) {
+            mountSnapshotCurve(preset, phoneObj || null, activeEditingPresetId === preset.id ? isBypassed : false);
+        }
+        renderSavedEQList();
+        if (saveBtnEl) {
+            let newBtn = eqSavedListEl && eqSavedListEl.querySelector('[data-eq-id="' + preset.id + '"] button.eq-pill-save');
+            if (newBtn) {
+                newBtn.classList.add("is-saved-flash");
+                setTimeout(() => newBtn.classList.remove("is-saved-flash"), 900);
+            }
+        }
+        if (typeof window.trackFeatureUsed === "function") {
+            window.trackFeatureUsed("eq_preset_updated");
+        }
+    }
+
+    function deleteSavedPreset(preset) {
+        if (!preset) return;
+        savedEQPresets = savedEQPresets.filter(p => p.id !== preset.id);
+        persistSavedEQState();
+        let existing = findActiveSnapshotCurve(preset.id);
+        if (existing) {
+            removePhone(existing);
+        } else {
+            if (activeEditingPresetId === preset.id) {
+                activeEditingPresetId = null;
+                drawEQOverlay(0);
+            }
+            renderSavedEQList();
+        }
+    }
+
+    function renderSavedEQList(scrollToBottom) {
+        if (!eqSavedSectionEl || !eqSavedListEl) return;
+        eqSavedSectionEl.classList.toggle("hidden", savedEQPresets.length === 0);
+        eqSavedListEl.innerHTML = "";
+        if (!savedEQPresets.length) return;
+
+        savedEQPresets.forEach(preset => {
+            let isActive = !!findActiveSnapshotCurve(preset.id);
+            let isEditing = isActive && activeEditingPresetId === preset.id;
+            let pill = document.createElement("div");
+            pill.className = "eq-preset-pill" + (isActive ? " is-active" : "") + (isEditing ? " is-editing" : "");
+            pill.setAttribute("data-eq-id", preset.id);
+            pill.title = isEditing
+                ? "Editing on graph · Click to hide · Double-click to rename"
+                : (isActive ? "Click to focus in EQ editor · Double-click to rename" : "Click to load onto graph · Double-click to rename");
+
+            let mainArea = document.createElement("div");
+            mainArea.className = "eq-pill-main";
+
+            let dotSpan = document.createElement("span");
+            dotSpan.className = "eq-pill-dot";
+
+            let labelSpan = document.createElement("span");
+            labelSpan.className = "eq-pill-label";
+            labelSpan.textContent = preset.name;
+
+            let modelSpan = document.createElement("span");
+            modelSpan.className = "eq-pill-model";
+            modelSpan.textContent = getPresetModelSubLabel(preset);
+
+            mainArea.appendChild(dotSpan);
+            mainArea.appendChild(labelSpan);
+            mainArea.appendChild(modelSpan);
+
+            let actions = document.createElement("div");
+            actions.className = "eq-pill-actions";
+
+            let saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.className = "eq-pill-btn eq-pill-save";
+            saveBtn.title = "Overwrite this preset with current EQ & Balance";
+            saveBtn.setAttribute("aria-label", "Overwrite preset " + preset.name);
+            saveBtn.innerHTML = SVG_ICON.save;
+            saveBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                overwriteSavedPreset(preset, saveBtn);
+            });
+            saveBtn.addEventListener("dblclick", (e) => e.stopPropagation());
+
+            let delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "eq-pill-btn eq-pill-delete";
+            delBtn.title = "Delete saved preset permanently";
+            delBtn.setAttribute("aria-label", "Delete preset " + preset.name);
+            delBtn.textContent = "×";
+            delBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                deleteSavedPreset(preset);
+            });
+            delBtn.addEventListener("dblclick", (e) => e.stopPropagation());
+
+            actions.appendChild(saveBtn);
+            actions.appendChild(delBtn);
+
+            pill.appendChild(mainArea);
+            pill.appendChild(actions);
+
+            let clickTimer = null;
+            mainArea.addEventListener("click", () => {
+                if (pill.classList.contains("is-renaming")) return;
+                clearTimeout(clickTimer);
+                clickTimer = setTimeout(() => {
+                    clickTimer = null;
+                    if (pill.classList.contains("is-renaming")) return;
+                    let plotted = findActiveSnapshotCurve(preset.id);
+                    if (!plotted) {
+                        activateSavedPreset(preset);
+                    } else if (activeEditingPresetId !== preset.id) {
+                        focusPlottedPreset(preset);
+                    } else {
+                        deselectSavedPreset(preset);
+                    }
+                }, 210);
+            });
+
+            mainArea.addEventListener("dblclick", (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                clearTimeout(clickTimer);
+                clickTimer = null;
+                if (pill.classList.contains("is-renaming")) return;
+                pill.classList.add("is-renaming");
+                startPillRename(labelSpan, preset.name, (newName) => {
+                    pill.classList.remove("is-renaming");
+                    preset.name = newName;
+                    persistSavedEQState();
+                    syncSnapshotCurveName(preset);
+                    renderSavedEQList();
+                }, () => {
+                    pill.classList.remove("is-renaming");
+                    renderSavedEQList();
+                });
+            });
+
+            eqSavedListEl.appendChild(pill);
+        });
+
+        syncSavedEQPillColors();
+        if (scrollToBottom) {
+            eqSavedListEl.scrollTop = eqSavedListEl.scrollHeight;
+        }
+    }
+
+    window.onEQSnapshotRemoved = function(removedId) {
+        if (activeEditingPresetId && activeEditingPresetId === removedId) {
+            activeEditingPresetId = null;
+            let remainingSnap = (typeof activePhones !== "undefined")
+                ? activePhones.find(p => p && p.isEQSnapshot && p.active && p.eqSnapshotId !== removedId)
+                : null;
+            let remainingPreset = remainingSnap ? savedEQPresets.find(x => x.id === remainingSnap.eqSnapshotId) : null;
+            if (remainingPreset) {
+                focusPlottedPreset(remainingPreset);
+                return;
+            }
+            drawEQOverlay(0);
+        }
+        renderSavedEQList();
+    };
+
+    loadSavedEQState();
+    renderSavedEQList();
+
+    // Save filters: saves unified CUSTOM EQ preset in sidebar + plots snapshot curve in bottom table
+    document.querySelector("div.extra-eq button.save-filters").addEventListener("click", () => {
+        saveCurrentScopeDOM();
+        let balanceVal = getCurrentChannelBalanceValue();
+        if (!hasAnyActiveFilters(true) && Math.abs(balanceVal) < 0.01) {
+            if (typeof showGraphNotice === "function") {
+                showGraphNotice("Please add an active filter or channel balance before saving EQ.");
+            }
+            return;
+        }
+        flushPendingApplyEQ();
+
+        let phoneSelected = eqPhoneSelect.value;
+        let phoneObj = phoneSelected && activePhones.filter(
+            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
+
+        if (!phoneObj && !userExplicitlyPickedSandbox && activeEditingPresetId) {
+            let activeSnap = findActiveSnapshotCurve(activeEditingPresetId);
+            if (activeSnap && !activeSnap.isSandboxEQ && activeSnap.eqBasePhone) {
+                phoneObj = activeSnap.eqBasePhone;
+            }
+        }
+
+        // If forking from an actively edited preset, revert that source preset on the graph back to its saved state
+        if (activeEditingPresetId) {
+            let prevPreset = savedEQPresets.find(x => x.id === activeEditingPresetId);
+            if (prevPreset) {
+                revertPresetCurveToSaved(prevPreset);
+            }
+        }
+
+        // Remove any temporary scratch "<Model> EQ" curve so no duplicate curve stays on the graph
+        activePhones
+            .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
+            .forEach(q => removePhone(q));
+
+        syncCustomEqCounterFloor();
+        let preset = {
+            id: "eq_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+            name: "CUSTOM EQ " + customEqCounter,
+            scopes: {
+                LR: cloneFilterArray(scopeFilters.LR),
+                L: cloneFilterArray(scopeFilters.L),
+                R: cloneFilterArray(scopeFilters.R)
+            },
+            balance: balanceVal,
+            model: captureCurrentModelMeta(phoneObj || null)
+        };
+        customEqCounter++;
+        savedEQPresets.push(preset);
+        persistSavedEQState();
+        activeEditingPresetId = preset.id;
+        mountSnapshotCurve(preset, phoneObj || null, isBypassed);
+        drawEQOverlay(0);
+        renderSavedEQList(true);
+        if (typeof window.trackFeatureUsed === "function") {
+            window.trackFeatureUsed("eq_saved");
+        }
     });
 
     // Import filters (Equalizer APO format — supports single-channel & Channel: L / R / all sections)
@@ -1507,7 +2321,7 @@ function addExtra() {
         }
         let phoneSelected = eqPhoneSelect.value;
         let phoneObj = phoneSelected && activePhones.filter(
-            p => !p.isPrefBounds && p.brand.name + " " + p.dispName == phoneSelected)[0];
+            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
         let preamp = computeWorstCasePreamp(true);
         let settings = "Preamp: " + preamp.toFixed(1) + " dB\r\n";
 
@@ -1550,6 +2364,9 @@ function addExtra() {
         let baseName = phoneObj ? phoneObj.fullName.replace(/^Uploaded /, "") : "MIRElink EQ";
         exportElem.download = baseName + " Filters.txt";
         exportElem.click();
+        if (typeof window.trackGraphExported === "function") {
+            window.trackGraphExported("eq_apo");
+        }
     });
 
     // Export filters as graphic EQ (Wavelet 127-band format for active scope total)
@@ -1562,7 +2379,7 @@ function addExtra() {
         }
         let phoneSelected = eqPhoneSelect.value;
         let phoneObj = phoneSelected && activePhones.filter(
-            p => !p.isPrefBounds && p.brand.name + " " + p.dispName == phoneSelected)[0];
+            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
         let graphicEQ = Equalizer.as_graphic_eq(filters);
         let settings = "GraphicEQ: " + graphicEQ.map(([f, gain]) =>
             f.toFixed(0) + " " + gain.toFixed(1)).join("; ");
@@ -1573,6 +2390,9 @@ function addExtra() {
         let scopeTag = (eqScope === "L" || eqScope === "R") ? (" " + eqScope) : "";
         exportElem.download = baseName + scopeTag + " Graphic Filters.txt";
         exportElem.click();
+        if (typeof window.trackGraphExported === "function") {
+            window.trackGraphExported("eq_wavelet");
+        }
     });
 
     /* AutoEQ disabled for MIRE workflow (preserved for future use)
@@ -1601,6 +2421,9 @@ function addExtra() {
             } else if (isPlayingAudio) {
                 startFftLoop();
             }
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("fft_spectrum");
+            }
         });
     }
 
@@ -1610,6 +2433,9 @@ function addExtra() {
             fftDrawerEl.classList.toggle("hidden", isOpen);
             fftDrawerEl.setAttribute("aria-hidden", isOpen ? "true" : "false");
             btnFftDrawer.setAttribute("aria-expanded", isOpen ? "false" : "true");
+            if (!isOpen && typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("fft_spectrum");
+            }
         });
     }
 
@@ -1623,6 +2449,9 @@ function addExtra() {
                 fftPeakHoldUntilPost.fill(0);
                 fftPeakHoldUntilPre.fill(0);
             }
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("fft_spectrum");
+            }
         });
     }
 
@@ -1630,6 +2459,9 @@ function addExtra() {
         btn.addEventListener("click", () => {
             fftStyle = (btn.getAttribute("data-style") === "wave") ? "wave" : "bars";
             fftStyleButtons.forEach(b => b.classList.toggle("selected", b === btn));
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("fft_spectrum");
+            }
         });
     });
 
@@ -1642,6 +2474,9 @@ function addExtra() {
             fftPeakPre.fill(-120);
             fftPeakHoldUntilPost.fill(0);
             fftPeakHoldUntilPre.fill(0);
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("fft_spectrum");
+            }
         });
     });
 
@@ -1652,6 +2487,9 @@ function addExtra() {
             let tc = fftSpeed === "fast" ? FFT_SMOOTH_FAST : FFT_SMOOTH_SLOW;
             preAnalyser.smoothingTimeConstant = tc;
             postAnalyser.smoothingTimeConstant = tc;
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("fft_spectrum");
+            }
         });
     });
 
@@ -2481,6 +3319,9 @@ function addExtra() {
                 playButton.classList.add("playing");
                 playButton.innerHTML = SVG_ICON.pause;
                 startFftLoop();
+                if (typeof window.trackFeatureUsed === "function") {
+                    window.trackFeatureUsed("eq_demo_played", eqTrack ? eqTrack.value : "pink");
+                }
             }
         });
 
@@ -2574,7 +3415,7 @@ function addExtra() {
     let calcEqDevPreamp = () => {
         const phoneSelected = eqPhoneSelect.value;
         const phoneObj = phoneSelected &&
-            activePhones.find(p => !p.isPrefBounds && p.brand.name + " " + p.dispName === phoneSelected && p.eq);
+            activePhones.find(p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && p.brand.name + " " + p.dispName === phoneSelected && p.eq);
         if (phoneObj && phoneObj.rawChannels && phoneObj.eq && phoneObj.eq.rawChannels) {
             let maxGain = -Infinity;
             for (let idx = 0; idx < phoneObj.rawChannels.length; idx++) {

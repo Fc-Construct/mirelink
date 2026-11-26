@@ -370,6 +370,9 @@ function initCalcBrush() {
 
             if (d3.event.type === "end") {
                 isBrushing = false;
+                if (selection && selection[1] > selection[0] && typeof window.trackFeatureUsed === "function") {
+                    window.trackFeatureUsed("calculate_band");
+                }
                 let src = d3.event.sourceEvent;
                 if (src && src.type !== "mouseout") {
                     try {

@@ -116,7 +116,7 @@ function updatePhoneTable() {
         .attr("data-filename", p=>p.fileName)
         .attr("class", p => p.isTarget ? "tr-target" : "tr-headphone card-expanded"),
         td = () => f.append("td");
-    f.style("color", p => getDivColor(p.id,true,p.hexColor));
+    f.style("color", p => p && !p.isTarget ? getDivColor(p.id, true, p.hexColor, p) : null);
 
     // When a new headphone enters on mobile, expand it and auto-collapse previous headphones
     if (f.filter(p => !p.isTarget).size() > 0) {
@@ -300,7 +300,31 @@ function updatePhoneTable() {
             .html("<svg viewBox='0 0 24 24'><use xlink:href='#save-icon'></svg>")
             .on("click", saveSquiggle);
     }
+
+    syncPhoneTableColors();
 }
+
+function syncPhoneTableColors() {
+    if (typeof table === "undefined") return;
+    let allRows = table.selectAll("tr");
+    allRows.style("color", p => {
+        if (!p || p.isTarget) return null;
+        return getDivColor(p.id, true, p.hexColor, p);
+    });
+    allRows.select("td.curve-color button")
+        .style("background-color", p => {
+            if (!p) return null;
+            if (p.isTarget && typeof targetColorCustom !== "undefined" && targetColorCustom) {
+                return targetColorCustom;
+            }
+            return getColor_AC({ p: p }).toString();
+        });
+    let modelRows = allRows.filter(p => p && !p.isTarget);
+    modelRows.select(".remove")
+        .style("background-image", colorBar)
+        .select("svg").call(cpCircles);
+}
+window.syncPhoneTableColors = syncPhoneTableColors;
 
 function updateChannels(p, ch, comp) {
     if (comp) { // if comp exists means we are compensating
@@ -714,6 +738,9 @@ function updateVariant(p) {
     chTd.call(addChannelControls);
     normalizePhone(p);
     updatePaths();
+    if (typeof window.trackPhoneViewed === "function") {
+        window.trackPhoneViewed(p, "variant");
+    }
     if (typeof extraEnabled !== "undefined" && extraEnabled && typeof extraEQEnabled !== "undefined" && extraEQEnabled && typeof window.updateEQPhoneSelect === "function") {
         window.updateEQPhoneSelect();
     }
@@ -800,7 +827,7 @@ function createPopupMenu(p, x, y) {
         wheelThickness: 10,
         handleDiameter: 16,
         wheelReflectsSaturation: true,
-        hex: p.hexColor ? p.hexColor : hclToHex(getCurveColor(p.id,0)),
+        hex: p.hexColor ? p.hexColor : hclToHex(getCurveColor(p.id, 0, p.hexColor, { p: p })),
         onChange: function(color) {
             p.hexColor = color.hex;
             input.node().value = color.hex;
@@ -825,7 +852,7 @@ function createPopupMenu(p, x, y) {
     hexMenu.append("span").text("Hex Color");
     let input = hexMenu.append("input")
         .attr("type", "text")
-        .attr("value", p.hexColor ? p.hexColor : hclToHex(getCurveColor(p.id,0)))
+        .attr("value", p.hexColor ? p.hexColor : hclToHex(getCurveColor(p.id, 0, p.hexColor, { p: p })))
         .on("input", function() {
             if (!this.value.startsWith("#")) {
                 this.value = "#" + this.value.replace(/#/g, "");
@@ -838,10 +865,8 @@ function createPopupMenu(p, x, y) {
     // Add a button to apply random colors
     hexMenu.append("button").text("Random").on("click", function() {
         p.id = getPhoneNumber();
-        // colorPhones();
-        colorWheel.hex = hclToHex(getCurveColor(p.id,0));
-        // change the hex color input value
-        // input.node().value = p.hexColor ? p.hexColor : hclToHex(getCurveColor(p.id,0));
+        delete p.hexColor;
+        colorWheel.hex = hclToHex(getCurveColor(p.id, 0, null, { p: p }));
     });
 
     // Add a 2nd row for dash-style buttons
@@ -921,14 +946,14 @@ function colorPhones() {
     if (typeof window.redrawEQOverlay === "function") {
         window.redrawEQOverlay();
     }
-    let c = p=>p.active?getDivColor(p.id,true,p.hexColor):null;
+    if (typeof window.syncSavedEQPillColors === "function") {
+        window.syncSavedEQPillColors();
+    }
+    let c = p => p.active ? getDivColor(p.id, true, p.hexColor, p) : null;
     doc.select("#phones").selectAll("div.phone-item")
-        .style("border-color",c);
-    let t = table.selectAll("tr").filter(p=>!p.isTarget)
-        .style("color", c);
-    t.select("button").style("background-color",p=>getColor_AC({p:p}));
-    t= t.call(s => s.select(".remove").style("background-image",colorBar)
-                    .select("svg").call(cpCircles))
+        .style("border-color", c);
+    syncPhoneTableColors();
+    let t = table.selectAll("tr").filter(p => !p.isTarget)
         .select("td.channels"); // Key line
     t.select("svg").remove();
     t.append("svg").call(addKey);

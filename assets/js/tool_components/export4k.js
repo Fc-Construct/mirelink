@@ -361,8 +361,8 @@
                 prepared.cleanup();
                 console.error("Error saving SVG:", err);
             });
-            if (typeof analyticsEnabled !== "undefined" && analyticsEnabled && typeof pushEventTag === "function") {
-                pushEventTag("clicked_download", targetWindow);
+            if (typeof window.trackGraphExported === "function") {
+                window.trackGraphExported("save_svg");
             }
             return;
         }
@@ -380,8 +380,8 @@
             console.error("Error saving 4K PNG:", err);
         });
 
-        if (typeof analyticsEnabled !== "undefined" && analyticsEnabled && typeof pushEventTag === "function") {
-            pushEventTag("clicked_download", targetWindow);
+        if (typeof window.trackGraphExported === "function") {
+            window.trackGraphExported("save_png");
         }
     }
 
@@ -406,8 +406,8 @@
             console.error("Error copying 4K screenshot to clipboard:", err);
         });
 
-        if (typeof analyticsEnabled !== "undefined" && analyticsEnabled && typeof pushEventTag === "function") {
-            pushEventTag("clicked_screenshot", targetWindow);
+        if (typeof window.trackGraphExported === "function") {
+            window.trackGraphExported("screenshot");
         }
     }
 

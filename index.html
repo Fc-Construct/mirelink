@@ -25,13 +25,21 @@
     <link rel="apple-touch-icon" sizes="180x180" href="assets/images/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-    <!-- Google Analytics 4 -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PT02YWT9VQ"></script>
+    <!-- Google Analytics 4 (strict allowlist: production GitHub Pages host only) -->
     <script>
       window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-PT02YWT9VQ');
+      function gtag(){window.dataLayer.push(arguments);}
+      (function() {
+        var allowedHosts = ["fc-construct.github.io"];
+        if (allowedHosts.indexOf(window.location.hostname) !== -1) {
+          var s = document.createElement("script");
+          s.async = true;
+          s.src = "https://www.googletagmanager.com/gtag/js?id=G-PT02YWT9VQ";
+          document.head.appendChild(s);
+          gtag("js", new Date());
+          gtag("config", "G-PT02YWT9VQ");
+        }
+      })();
     </script>
 
     <style type="text/css">
@@ -55,6 +63,7 @@
 
     <!-- App Configuration -->
     <script src="assets/js/config.js"></script>
+    <script src="assets/js/tool_components/graphAnalytics.js"></script>
 
     <!-- Visualizer & Component Modules -->
     <!-- AutoEQ commented out for MIRE workflow (uncomment to re-enable)
