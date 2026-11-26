@@ -208,6 +208,35 @@
           "",
           "Glasses"
         ]
+      },
+      {
+        "name": "Open Wireless 2",
+        "file": [
+          "Philphone Open Wireless 2",
+          "Philphone Open Wireless 2 G",
+          "Philphone Open Wireless 2 (Airplane)",
+          "Philphone Open Wireless 2 (Bass)",
+          "Philphone Open Wireless 2 (Bass Airplane)",
+          "Philphone Open Wireless 2 (Bass Home)",
+          "Philphone Open Wireless 2 (Home)",
+          "Philphone Open Wireless 2 (Leak Reduction)",
+          "Philphone Open Wireless 2 (Treble)",
+          "Philphone Open Wireless 2 (V-Shaped)",
+          "Philphone Open Wireless 2 (Vocals)"
+        ],
+        "suffix": [
+          "",
+          "Glasses",
+          "(Airplane)",
+          "(Bass)",
+          "(Bass Airplane)",
+          "(Bass Home)",
+          "(Home)",
+          "(Leak Reduction)",
+          "(Treble)",
+          "(V-Shaped)",
+          "(Vocals)"
+        ]
       }
     ]
   },
@@ -361,6 +390,94 @@
           "Stock Glasses",
           "Bass",
           "Bass Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Lewitt",
+    "phones": [
+      {
+        "name": "LW6",
+        "file": [
+          "Lewitt LW6",
+          "Lewitt LW6 G",
+          "Lewitt LW6 (Bass)",
+          "Lewitt LW6 (High)",
+          "Lewitt LW6 (Virtual)"
+        ],
+        "suffix": [
+          "",
+          "Glasses",
+          "(Bass)",
+          "(High)",
+          "(Virtual)"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Loewe",
+    "phones": [
+      {
+        "name": "Leo",
+        "file": [
+          "Loewe Leo",
+          "Loewe Leo G",
+          "Loewe Leo (ANC 50)",
+          "Loewe Leo (ANC 100)",
+          "Loewe Leo (Bass)",
+          "Loewe Leo (Classic)",
+          "Loewe Leo G (Classic)",
+          "Loewe Leo (Pop)",
+          "Loewe Leo (Rock)",
+          "Loewe Leo (Transparent)",
+          "Loewe Leo (Voice)"
+        ],
+        "suffix": [
+          "",
+          "Glasses",
+          "(ANC 50)",
+          "(ANC 100)",
+          "(Bass)",
+          "(Classic)",
+          "(Classic) Glasses",
+          "(Pop)",
+          "(Rock)",
+          "(Transparent)",
+          "(Voice)"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Myster",
+    "phones": [
+      {
+        "name": "Puff Muffs",
+        "file": [
+          "Myster Puff Muffs",
+          "Myster Puff Muffs G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "SJY",
+    "phones": [
+      {
+        "name": "Argos",
+        "file": [
+          "SJY Argos",
+          "SJY Argos G"
+        ],
+        "suffix": [
+          "",
+          "Glasses"
         ]
       }
     ]

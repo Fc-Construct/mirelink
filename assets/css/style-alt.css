@@ -1934,6 +1934,30 @@ tbody.curves > tr > td.channels {
     border-color: rgba(255, 255, 255, 0.08);
 }
 
+.channel-pill[data-available="false"] {
+    opacity: 0.26;
+    border-color: var(--background-color-contrast-more);
+    cursor: default;
+}
+
+.channel-pill[data-available="false"]:hover {
+    border-color: var(--background-color-contrast-more);
+}
+
+.channel-pill[data-available="false"] .pill-eye,
+.channel-pill[data-available="false"] .pill-label,
+.channel-pill[data-available="false"] .pill-chevron-wrap,
+.channel-pill[data-available="false"] .pill-native-select {
+    cursor: default;
+}
+
+.channel-pill[data-available="false"] .pill-eye:hover,
+.channel-pill[data-available="false"] .pill-label:hover,
+.channel-pill[data-available="false"] .pill-chevron-wrap:hover .pill-chevron-icon {
+    color: inherit;
+    opacity: 0.55;
+}
+
 .channel-pill[data-visible="true"] {
     opacity: 1;
     border-color: var(--background-color-contrast-more);

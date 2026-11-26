@@ -1,10 +1,10 @@
 # Fc-Construct's MIRE Squiglink
 
-An open-canal **MIRE (Microphone-in-Real-Ear)** frequency response database and interactive visualization tool for over-ear headphones, maintained by **Fc-Construct**.
+An open-canal **MIRE (Microphone-in-Real-Ear)** frequency response database and interactive visualization tool for over-ear headphones, maintained by **Fc-Construct**. 
 
 ---
 
-## 1. Project Overview & Vision
+## 1. Project Overview & Vision 
 
 This application is customized specifically for **open-canal MIRE headphone acoustic measurements**, modifying coupler-focused systems and introducing dedicated seating, channel, and variant controls.
 
@@ -44,7 +44,7 @@ This application is customized specifically for **open-canal MIRE headphone acou
 * **Hybrid Source of Truth (`phone_book.json`)**: Preserves manual curation, custom ordering, and unique model/variant naming hierarchies without algorithmic misclassifications.
 * **Automated Python Sync (`update_phonebook.py`) & Static File Inventory (`file_inventory.json`)**:
   * Scans `/data/` for raw measurement `.txt` files (supporting compact and spaced channel/seating naming conventions).
-  * Non-destructively merges new measurement prefixes into `phone_book.json` while keeping existing manual entries intact.
+  * Non-destructively merges new measurement prefixes into `phone_book.json` while keeping existing manual entries intact, and dynamically nests parenthesized modes (`(ANC 100)`, `(Bass)`, etc.) alongside `G` / `Glasses` tags in either order (`Model G (Mode)` or `Model (Mode) G`), sorting each `(Mode)` directly before `(Mode) Glasses`.
   * Automatically generates `file_inventory.json` mapping every model/variant prefix directly to its exact measurement files on disk, completely eliminating runtime 404 probing requests.
   * Automatically mirrors updated data and inventory files to `/public/` for local sandbox development.
 * **Runtime Zero-404 Pre-loading, Caching & In-Flight Deduplication (`graphtool.js`)**:
@@ -97,14 +97,17 @@ This application is customized specifically for **open-canal MIRE headphone acou
 * **Hover Isolation & Average Dimming**:
   * Hovering over any individual channel pill isolates and highlights only that channel's curves on the graph (`.highlight` class).
   * When `L+R` (AVG) is active, `Left` and `Right` curves automatically dim to 45% opacity to emphasize the primary average curve. Hovering over the `Left` or `Right` pill instantly restores their opacity on hover.
+* **True Seating Metadata & Adaptive Missing-Channel Pills**: Preserves actual measurement seating numbers from filenames (`L3`, `R3`, `L4`, etc.). Missing channels remain visible as deselected, grayed-out disabled pills (`Left: —` / `L + R: —` with empty chevron dropdowns) so UI layout stays stable while unavailable controls cannot be toggled.
+* **Smart Channel & Seating Sync for Mode Comparisons**: When comparing a single-channel wireless/DSP mode (e.g., `R3`-only or `L3`-only) with another headphone, automatically displays whichever channel exists (never rendering blank on `L3`-only presets) and defaults sibling models to the matching channel and seating number (`R3` $\leftrightarrow$ `R3` or `L3` $\leftrightarrow$ `L3`) with graceful fallback to channel `AVG` when that seating doesn't exist—while leaving all pills free for manual override.
 * **Integrated Offset Control**: `OFFSET [ 0 ]` control integrated cleanly into the model control row.
+* **Channel Imbalance Detector Disabled for MIRE**: Updated `hasImbalance()` to average all Left seatings against all Right seatings (fixing an upstream single-seating bug where `p.channels[0]` vs. `p.channels[1]` compared `L1` vs. `L2` on multi-seating files), then commented out the `⚠️` imbalance warning badge (`graphtool.js` / `phoneTable.js`). Because open-canal human-ear MIRE measurements naturally exhibit minor broadband L/R asymmetry across ear anatomy and pad fit without a coupler rig reference, threshold-based alerts are inherently arbitrary; users can directly inspect plotted `Left` vs. `Right` curves and quantify band differences via **Calculate** (`Δ L/R`).
 
 ### 15. Development Sandbox & Asset Mirroring Architecture
 * **The `/public/` Folder**: In the Gemini AI Studio preview environment, the `/public/` directory acts as the static serving root for web assets and scripts.
 * **Automated Asset Mirroring (`autoSyncAssetsPlugin`)**: To prevent manual file duplication, a custom Vite plugin (`autoSyncAssetsPlugin` in `vite.config.ts`) automatically mirrors all files and subdirectories from `/assets/` directly into `/public/assets/` (along with `README.md`) upon dev server startup, build start, and page requests. Developers can edit or add assets exclusively in `/assets/` with instant synchronization.
 
 ### 16. Modular Parametric Equalizer, Channel Scoping & Real-Time FFT Spectrum (`eqPanel.js`)
-* **8-Band Standard PEQ Rack (`48 kHz` RBJ Biquad Engine)**: Pre-initialized with an 8-band studio default layout (`60 Hz LSQ Q=0.71`, `200 / 500 / 1000 / 3000 / 6000 / 8000 Hz PK Q=1.0`, `10000 Hz HSQ Q=0.71` in `0.5 dB` gain steps) evaluated via second-order RBJ biquad math (`equalizer.js`), expandable up to `extraEQBandsMax` (20 bands).
+* **8-Band Standard PEQ Rack (`48 kHz` RBJ Biquad Engine)**: Pre-initialized with an 8-band studio default layout (`60 Hz LSQ Q=0.71`, `200 / 500 / 1000 / 3000 / 6000 / 8000 Hz PK Q=1.0`, `10000 Hz HSQ Q=0.71` in `0.1 dB` gain steps) evaluated via second-order RBJ biquad math (`equalizer.js`), expandable up to `extraEQBandsMax` (20 bands).
 * **Additive 3-Scope Channel Architecture (`L+R`, `Left`, `Right`)**:
   * Maintains three persistent filter banks—shared **`L+R`** plus independent **`Left`** and **`Right`** trim racks—computing true additive stereo chains (`L = (L+R) + Left`, `R = (L+R) + Right`) for both plotted curves and live audio playback.
   * Automatically defaults single-model EQ comparisons cleanly to `AVG` (`L+R`) and expands to split `Left`/`Right` channels whenever per-ear trim filters are active, while preserving MIRE's standard `R`-channel multi-headphone comparison behavior.
@@ -115,12 +118,22 @@ This application is customized specifically for **open-canal MIRE headphone acou
   * **Parallel Dry/Wet Graph & In-Place Ramping**: Keeps Dry and stereo Biquad Wet paths permanently wired in parallel, ramping `Bypass` crossfades and live filter `frequency`/`Q`/`gain` edits smoothly via Web Audio `setTargetAtTime` without disconnecting nodes or introducing switching clicks.
   * **Built-In `ⓘ` Architecture Tooltip**: Hovering or clicking `ⓘ` next to **Parametric Equalizer** displays a floating summary explaining perceptual auto-gain, shared clipping protection, and why `Pre-amp` preserves peak headroom for exports.
   * **`EQ Curve` Overlay**: Renders the pure combined filter transfer function for the active scope centered directly on the graph reference (`yCenter`), auto-activating on first adjustment, dynamically matching the active `... EQ` curve color, and dimming visually when bypassed for synchronized audio/visual A/B verification.
+* **Interactive On-Graph Draggable EQ Handles (`g.eq-handles-layer`)**:
+  * **Console-Style Direct Manipulation**: Displays numbered, semi-transparent filter nodes for the active scope once EQ adjustment begins (or when double-clicking empty graph space to add a peaking band), paired with a shaded single-band preview curve and a compact floating `Hz | Gain | Q` readout. Supports free 2D dragging for Frequency/Gain (`Shift` for 4× fine control), mouse-wheel Q adjustment, double-click reset to `0 dB`, bidirectional sidebar row highlighting, and automatic yielding whenever **Inspect** or **Calculate** tools are active (excluded from 4K PNG exports).
+  * **Delegated Pointer Events & Fixed SVG Sublayers**: Built around a single delegated Pointer Events controller (`pointerdown`/`pointermove`/`pointerup` with `setPointerCapture` and `getScreenCTM().inverse()` coordinate mapping) attached once on `g.eq-handles-layer`, keeping `g.eq-handles-group` and `g.eq-handle-tooltip-group` in fixed SVG z-order without DOM reparenting during drags, while coalescing full headphone curve recalculations via `requestAnimationFrame`.
+  * **Hardened Pre-Existing SVG & Graph CSS Boundaries**: Because `style-alt.css` sets `pointer-events: none` on `svg#fr-graph` while enabling `pointer-events: all` globally on `svg#fr-graph rect`, the handle layer explicitly isolates `pointer-events: all` and `touch-action: none` onto `.eq-band-handle` targets and locks floating tooltip `<rect>`/`<text>` elements and preview paths to `pointer-events: none`, preventing hover/drag capture interference with the underlying graph interaction layer.
 * **Real-Time Dual-Tap `16384`-Point `1/12`-Octave FFT Spectrum Analyzer (`#fft-canvas`)**:
   * **Parallel Stereo Web Audio Chain**: Routes built-in (`Pink Noise`, `Scarlet Fire`), user-uploaded tracks, and a `20 Hz–20 kHz` logarithmic Tone Generator through independent L/R Web Audio `BiquadFilterNode` chains and an attenuation-based stereo balance stage (never applying positive digital boost gain).
   * **Pre-Fader Metering**: Dual `16384`-point `AnalyserNode` taps sample both **Pre-EQ** and **Post-EQ** signals prior to the master monitor `volumeNode` (default `70%`), keeping spectral levels independent of listening volume.
   * **Power-Accurate Logarithmic Binning**: Sums fractional-bin linear power across `120` logarithmic `1/12`-octave bands (`20 Hz–20 kHz`) with sub-bin low-frequency interpolation so broadband pink noise renders flat across the spectrum.
   * **Configurable Display Modes**: Renders onto a hardware-scaled `<canvas id="fft-canvas">` underlay behind `#fr-graph` with selectable **Bars** (default high-density micro-bars) or smooth **Wave** visualization, **Post-EQ / Pre-EQ** tap switching, **Slow / Fast** ballistics (`0.89` / `0.74` analyser smoothing and `8` / `14 dB/s` decay), and a true **1000 ms Peak Hold** envelope.
 * **AutoEQ Excluded for MIRE**: Automated AutoEQ solver controls are commented out and disabled in both `eqPanel.js` and `equalizer.js` to avoid inappropriate coupler-style auto-fitting on open-canal MIRE data.
+
+### 17. Modular Floating Music Player (`musicPlayer.js`)
+* **Shared Audio-Bridge Routing (`window.mireAudioBridge`)**: Built as a self-contained, desktop-only (`> 1000px`) floating window—supporting both full playlist view and a collapsed mini transport bar—that routes local playback directly through MIRElink's Web Audio chain (Parametric EQ, Perceptual Auto-Gain, Channel Balance, and real-time FFT Spectrum Analyzer) without coupling to core graphing code.
+* **Zero-Copy Local Library Persistence & One-Click Reconnect**: Stores lightweight track metadata and Chromium File System Access API file/folder handles in IndexedDB rather than copying audio blobs into browser storage. When browser restarts reset handle permissions, a header **`Reconnect`** control restores read access across stored handles in one step (with folder/file re-link fallback on browsers without persistent handle APIs).
+* **In-Browser Metadata Tag & Codec Parsing**: Parses embedded headers directly from local audio files (`ID3v1/ID3v2`, `FLAC` Vorbis comments, `OGG/Opus`, `MP4/M4A` atoms, `WAV`, and `AIFF`, with encoding fallbacks) to extract `Title`, `Artist`, `Album Artist`, `Album`, `#`, `Codec`, `Bitrate`, and `Duration`—supporting custom playlists, instant metadata search, resizable columns, drag-to-reorder column preferences, and combined single-line tag columns (`Title / Artist`, `Artist / Album`, `Album Artist / Album`).
+* **On-Demand Single Cover Art (Zero Art Caching)**: To prioritize leanness and table scrolling responsiveness on large libraries, album art is never pre-decoded or stored across the track list. Artwork is extracted on demand solely for the currently playing track in the bottom transport bar and its `ObjectURL` is immediately revoked whenever playback switches or stops. 
 
 ---
 
@@ -138,6 +151,6 @@ Format: `[Brand] [Model] [Glass or Variant] [Channel][Seating].txt`
 * Clean Seal: `Sony MDR-MV1 L1.txt`
 * Eyeglasses Seal: `Sony MDR-MV1 G L1.txt`
 * Multi-Word Brand: `Audio Technica ATH R50x L1.txt`
-* Pad/Variant Tag: `Sennheiser HD600 (Velour Pads) L1.txt`
+* Mode / Pad Variant Tag: `Loewe Leo (ANC 100) R3.txt` (both `Model G (Mode)` and `Model (Mode) G` are supported)
 
 Upload `.txt` files directly into the **`/data/`** directory on GitHub to automatically build the phonebook. 

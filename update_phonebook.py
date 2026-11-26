@@ -283,6 +283,88 @@ def find_rename_matches(missing_prefixes, new_prefixes, prev_hashes, curr_hashes
     return rename_map
 
 
+def natural_sort_key(text):
+    """
+    Sorts strings containing numbers naturally (e.g. 'ANC 50' before 'ANC 100').
+    """
+    return [int(tok) if tok.isdigit() else tok.lower() for tok in re.split(r"(\d+)", text or "")]
+
+
+def decompose_variant_prefix(prefix):
+    """
+    Decomposes a full file prefix into (base_prefix, mode_label, is_glasses).
+    Supports both '<Base> G (<Mode>)' and '<Base> (<Mode>) G' (as well as 'Glasses'),
+    '<Base> (<Mode>)', and '<Base> G' / '<Base> Glasses'.
+    """
+    s = (prefix or "").strip()
+    is_glasses = False
+    mode_label = None
+
+    # 1. Trailing G / Glasses token: e.g. '<Base> G' or '<Base> (<Mode>) G'
+    g_tail = re.match(r"^(.*?)\s+\b(G|Glasses)\b$", s, re.IGNORECASE)
+    if g_tail:
+        is_glasses = True
+        s = g_tail.group(1).strip()
+
+    # 2. Trailing parenthesized mode: e.g. '<Base> (<Mode>)' or '<Base> G (<Mode>)'
+    paren_tail = re.match(r"^(.*?)\s*\(([^)]+)\)$", s)
+    if paren_tail:
+        candidate_base = paren_tail.group(1).strip()
+        raw_mode = paren_tail.group(2).strip()
+        if candidate_base:
+            s = candidate_base
+            # Handle rare '(G)' / '(Glasses)' or '(<Mode> G)' inside parens
+            if re.fullmatch(r"(G|Glasses)", raw_mode, re.IGNORECASE):
+                is_glasses = True
+            else:
+                mode_g = re.match(r"^(.*?)\s+\b(G|Glasses)\b$", raw_mode, re.IGNORECASE)
+                if mode_g and mode_g.group(1).strip():
+                    is_glasses = True
+                    mode_label = mode_g.group(1).strip()
+                else:
+                    mode_label = raw_mode
+
+            # 3. G / Glasses token immediately before parens: e.g. '<Base> G (<Mode>)'
+            g_before = re.match(r"^(.*?)\s+\b(G|Glasses)\b$", s, re.IGNORECASE)
+            if g_before and g_before.group(1).strip():
+                is_glasses = True
+                s = g_before.group(1).strip()
+
+    return s, mode_label, is_glasses
+
+
+def format_variant_suffix(mode_label, is_glasses):
+    """
+    Formats normalized display suffix for phone_book.json:
+      - Base stock: ""
+      - Base glasses: "Glasses"
+      - Mode: "(Mode)"
+      - Mode + glasses: "(Mode) Glasses"
+    """
+    parts = []
+    if mode_label:
+        parts.append(f"({mode_label})")
+    if is_glasses:
+        parts.append("Glasses")
+    return " ".join(parts)
+
+
+def variant_sort_key(prefix, mode_label=None, is_glasses=None):
+    """
+    Deterministic ordering for model variants:
+      1. Base (""), then Base Glasses ("Glasses")
+      2. Each (Mode) sorted naturally, immediately followed by (Mode) Glasses
+    """
+    if mode_label is None and is_glasses is None:
+        _, mode_label, is_glasses = decompose_variant_prefix(prefix)
+    return (
+        0 if not mode_label else 1,
+        natural_sort_key(mode_label or ""),
+        1 if is_glasses else 0,
+        (prefix or "").lower()
+    )
+
+
 def apply_renames(phonebook, rename_map):
     """
     Applies detected prefix renames in place while preserving manual curation.
@@ -319,13 +401,17 @@ def apply_renames(phonebook, rename_map):
                 file_list[idx] = new_p
                 changed_here = True
 
+                old_base_p, _, _ = decompose_variant_prefix(old_p)
+                new_base_p, _, _ = decompose_variant_prefix(new_p)
                 old_b, old_rest = extract_brand_and_model(old_p, known_brands)
                 new_b, new_rest = extract_brand_and_model(new_p, brand_candidates)
+                _, old_clean_rest = extract_brand_and_model(old_base_p, known_brands)
+                _, new_clean_rest = extract_brand_and_model(new_base_p, brand_candidates)
                 brand_targets.append((old_b, new_b))
 
                 # Update model display name only if it wasn't custom-curated
-                clean_old_model = re.sub(r"\s+\b(G|Glasses)\b$", "", old_rest, flags=re.IGNORECASE).strip() or old_rest
-                clean_new_model = re.sub(r"\s+\b(G|Glasses)\b$", "", new_rest, flags=re.IGNORECASE).strip() or new_rest
+                clean_old_model = old_clean_rest.strip() or old_rest
+                clean_new_model = new_clean_rest.strip() or new_rest
                 cur_model_name = phone_entry.get("name", "")
                 if cur_model_name == clean_old_model or cur_model_name == old_rest:
                     phone_entry["name"] = clean_new_model
@@ -422,38 +508,89 @@ def prune_missing_entries(phonebook, missing_prefixes):
 def find_matching_model_for_variant(new_prefix, phonebook):
     """
     Determines if a new prefix belongs to an existing model as a variant.
-    Returns (brand_entry, phone_entry, variant_suffix) if matched, else None.
+    Returns (brand_entry, phone_entry, variant_suffix, insert_after_ex) if matched, else None.
+    Supports both '<Base> G (<Mode>)' and '<Base> (<Mode>) G', '<Base> (<Mode>)', and '<Base> G'.
     Avoids greedy prefix collisions (e.g. Susvara vs Susvara Unveiled).
-    Only matches explicit glasses tokens (e.g. '<ex> G' / '<ex> Glasses') or explicit parentheses.
     """
-    for brand_entry in phonebook:
-        for phone in brand_entry.get("phones", []):
-            files = phone.get("file")
-            existing_prefixes = files if isinstance(files, list) else [files]
+    new_base, new_mode, new_glasses = decompose_variant_prefix(new_prefix)
 
-            # Check if new_prefix is a glasses variant of an existing file prefix
-            for ex in existing_prefixes:
-                if not isinstance(ex, str):
-                    continue
-                # Matches e.g. "<ex> G" or "<ex> Glasses"
-                g_match = re.search(r"^(.*?)\s+\b(G|Glasses)\b$", new_prefix, re.IGNORECASE)
-                if g_match and g_match.group(1).strip() == ex:
-                    # Find corresponding base suffix if available
-                    suffixes = phone.get("suffix")
-                    ex_suffix = ""
-                    if isinstance(suffixes, list) and len(suffixes) == len(existing_prefixes):
-                        ex_suffix = suffixes[existing_prefixes.index(ex)]
-                    new_suffix = f"{ex_suffix} Glasses".strip() if ex_suffix else "Glasses"
-                    return brand_entry, phone, new_suffix
+    # Pass 1: Match exact prefix for simple '<ex> G' / '<ex> Glasses' (e.g. 'AUNE AR3000 Vienna' -> 'AUNE AR3000 Vienna G')
+    if new_glasses and not new_mode:
+        g_stripped = re.sub(r"\s+\b(G|Glasses)\b$", "", new_prefix, flags=re.IGNORECASE).strip()
+        for brand_entry in phonebook:
+            for phone in brand_entry.get("phones", []):
+                files = phone.get("file")
+                existing_prefixes = files if isinstance(files, list) else [files]
+                for idx, ex in enumerate(existing_prefixes):
+                    if isinstance(ex, str) and ex == g_stripped:
+                        suffixes = phone.get("suffix")
+                        ex_suffix = ""
+                        if isinstance(suffixes, list) and len(suffixes) == len(existing_prefixes):
+                            ex_suffix = suffixes[idx]
+                        new_suffix = f"{ex_suffix} Glasses".strip() if ex_suffix else "Glasses"
+                        return brand_entry, phone, new_suffix, ex
 
-                # Matches e.g. "<ex> (<variant_name>)"
-                paren_match = re.search(r"^(.*?)\s*\(([^)]+)\)$", new_prefix)
-                if paren_match and paren_match.group(1).strip() == ex:
-                    var_label = paren_match.group(2).strip()
-                    cleaned_var = re.sub(r"\bG\b", "Glasses", var_label, flags=re.IGNORECASE)
-                    return brand_entry, phone, cleaned_var
+    # Pass 2: Match decomposed base prefix (handles '<Base> (<Mode>)', '<Base> G (<Mode>)', '<Base> (<Mode>) G', '<Base> G')
+    if new_mode is not None or new_glasses:
+        for brand_entry in phonebook:
+            for phone in brand_entry.get("phones", []):
+                files = phone.get("file")
+                existing_prefixes = files if isinstance(files, list) else [files]
+                for ex in existing_prefixes:
+                    if not isinstance(ex, str):
+                        continue
+                    ex_base, _, _ = decompose_variant_prefix(ex)
+                    if ex_base == new_base:
+                        return brand_entry, phone, format_variant_suffix(new_mode, new_glasses), None
 
     return None
+
+
+def insert_variant_cleanly(phone_entry, prefix, variant_suffix, insert_after_ex=None):
+    """
+    Inserts a variant into phone_entry['file'] and phone_entry['suffix'], keeping
+    '(Mode)' + '(Mode) Glasses' pairs grouped cleanly while respecting manual non-paren order.
+    """
+    current_files = phone_entry.get("file")
+    current_suffixes = phone_entry.get("suffix")
+
+    if isinstance(current_files, str):
+        current_files = [current_files]
+        _, ex_mode, ex_glasses = decompose_variant_prefix(current_files[0])
+        current_suffixes = [format_variant_suffix(ex_mode, ex_glasses)]
+
+    if not isinstance(current_suffixes, list) or len(current_suffixes) != len(current_files):
+        current_suffixes = ["" for _ in current_files]
+
+    if insert_after_ex and insert_after_ex in current_files:
+        idx = current_files.index(insert_after_ex) + 1
+        current_files.insert(idx, prefix)
+        current_suffixes.insert(idx, variant_suffix)
+    else:
+        _, new_mode, new_glasses = decompose_variant_prefix(prefix)
+        # If all existing entries follow standard base/glasses/(mode) structure, sort cleanly
+        is_standard = all(
+            s in ("", "Glasses") or s.startswith("(")
+            for s in current_suffixes
+        )
+        current_files.append(prefix)
+        current_suffixes.append(variant_suffix)
+        if is_standard:
+            paired = list(zip(current_files, current_suffixes))
+            paired.sort(key=lambda pair: variant_sort_key(pair[0]))
+            current_files = [pair[0] for pair in paired]
+            current_suffixes = [pair[1] for pair in paired]
+        elif new_mode is not None:
+            # Keep manual non-paren entries first, sort appended paren modes after
+            head = [(f, s) for f, s in zip(current_files[:-1], current_suffixes[:-1]) if not s.startswith("(")]
+            tail = [(f, s) for f, s in zip(current_files, current_suffixes) if s.startswith("(")]
+            tail.sort(key=lambda pair: variant_sort_key(pair[0]))
+            paired = head + tail
+            current_files = [pair[0] for pair in paired]
+            current_suffixes = [pair[1] for pair in paired]
+
+    phone_entry["file"] = current_files
+    phone_entry["suffix"] = current_suffixes
 
 
 def update_phonebook():
@@ -520,65 +657,54 @@ def update_phonebook():
         known_brand_names = [b["name"] for b in phonebook]
         unmatched_new_models = []
 
-        for prefix in sorted_new:
+        # Process base/glasses before parenthesized modes so matching is deterministic
+        ordered_new = sorted(sorted_new, key=lambda p: variant_sort_key(p))
+
+        for prefix in ordered_new:
             match = find_matching_model_for_variant(prefix, phonebook)
             if match:
-                brand_entry, phone_entry, variant_suffix = match
-                current_files = phone_entry.get("file")
-                current_suffixes = phone_entry.get("suffix")
-
-                if isinstance(current_files, str):
-                    current_files = [current_files]
-                    current_suffixes = [""]
-
-                if not isinstance(current_suffixes, list) or len(current_suffixes) != len(current_files):
-                    current_suffixes = ["" for _ in current_files]
-
-                current_files.append(prefix)
-                current_suffixes.append(variant_suffix)
-
-                phone_entry["file"] = current_files
-                phone_entry["suffix"] = current_suffixes
+                brand_entry, phone_entry, variant_suffix, insert_after_ex = match
+                insert_variant_cleanly(phone_entry, prefix, variant_suffix, insert_after_ex)
                 print(f"  -> Added variant '{variant_suffix}' to existing model '{phone_entry.get('name')}' under brand '{brand_entry.get('name')}'")
             else:
                 unmatched_new_models.append(prefix)
 
         if unmatched_new_models:
-            brand_grouped = defaultdict(list)
+            # Group by decomposed base_prefix so base, G, (Mode), G (Mode), and (Mode) G
+            # discovered in the same run nest together under one model cleanly.
+            grouped_by_base = defaultdict(list)
             for p in unmatched_new_models:
-                brand, rest = extract_brand_and_model(p, known_brand_names)
-                brand_grouped[brand].append((p, rest))
+                base_p, mode_label, is_glasses = decompose_variant_prefix(p)
+                grouped_by_base[base_p].append((p, mode_label, is_glasses))
 
-            for brand, items in brand_grouped.items():
+            brand_grouped = defaultdict(list)
+            for base_p, variant_items in grouped_by_base.items():
+                brand, model_name = extract_brand_and_model(base_p, known_brand_names)
+                brand_grouped[brand].append((model_name, variant_items))
+
+            for brand, model_groups in brand_grouped.items():
                 brand_entry = next((b for b in phonebook if b["name"].lower() == brand.lower()), None)
                 if not brand_entry:
                     brand_entry = {"name": brand, "phones": []}
                     phonebook.append(brand_entry)
 
-                model_subgroups = defaultdict(list)
-                for full_p, rest in items:
-                    clean_name = re.sub(r"\s+\b(G|Glasses)\b$", "", rest, flags=re.IGNORECASE).strip()
-                    if not clean_name:
-                        clean_name = rest
-                    model_subgroups[clean_name].append(full_p)
+                for model_name, variant_items in sorted(model_groups, key=lambda x: natural_sort_key(x[0])):
+                    variant_items.sort(key=lambda item: variant_sort_key(item[0], item[1], item[2]))
+                    sorted_p = [item[0] for item in variant_items]
+                    suffixes = [format_variant_suffix(item[1], item[2]) for item in variant_items]
 
-                for model_name, prefixes in model_subgroups.items():
-                    if len(prefixes) > 1:
-                        sorted_p = sorted(prefixes, key=lambda x: (1 if re.search(r"\b(G|Glasses)\b$", x, re.I) else 0, x))
-                        suffixes = ["Glasses" if re.search(r"\b(G|Glasses)\b$", x, re.I) else "" for x in sorted_p]
+                    if len(sorted_p) == 1 and suffixes[0] == "":
+                        brand_entry["phones"].append({
+                            "name": model_name,
+                            "file": sorted_p[0]
+                        })
+                    else:
                         brand_entry["phones"].append({
                             "name": model_name,
                             "file": sorted_p,
                             "suffix": suffixes
                         })
-                    else:
-                        is_glasses = bool(re.search(r"\b(G|Glasses)\b$", prefixes[0], re.I))
-                        brand_entry["phones"].append({
-                            "name": model_name,
-                            "file": prefixes[0] if not is_glasses else prefixes,
-                            **({"suffix": ["Glasses"]} if is_glasses else {})
-                        })
-                    print(f"  -> Added new model '{model_name}' under brand '{brand_entry['name']}'")
+                    print(f"  -> Added new model '{model_name}' under brand '{brand_entry['name']}' ({len(sorted_p)} variant(s))")
 
     # 8. Persist updated phonebook, hashes, inventory, and mirror to /public/data/
     pb_changed = write_json_if_changed(OUTPUT_FILE, phonebook)

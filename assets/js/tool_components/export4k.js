@@ -89,7 +89,7 @@
         clone.querySelectorAll("path.highlight").forEach(p => p.classList.remove("highlight"));
 
         // Strip interactive-only controls from export clone while preserving user-toggled labels cleanly
-        clone.querySelectorAll("g.dBScaler, g.calc-brush-group, g.inspector, g.inspectLabel").forEach(el => {
+        clone.querySelectorAll("g.dBScaler, g.calc-brush-group, g.inspector, g.inspectLabel, g.eq-handles-layer, path.eq-band-preview").forEach(el => {
             el.setAttribute("display", "none");
         });
 

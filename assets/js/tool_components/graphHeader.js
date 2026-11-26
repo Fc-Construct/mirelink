@@ -81,6 +81,9 @@
         let inspectOn = typeof interactInspect !== "undefined" && !!interactInspect;
         let calcOn = typeof interactCalc !== "undefined" && !!interactCalc;
         graphSizer.setAttribute("data-tool-active", (inspectOn || calcOn) ? "true" : "false");
+        if (typeof window.syncEQHandlesInteractivity === "function") {
+            window.syncEQHandlesInteractivity();
+        }
     }
 
     function syncGraphHeader() {

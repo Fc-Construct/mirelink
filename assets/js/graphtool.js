@@ -191,8 +191,21 @@ doc.html(`
           </div>
 
           <div class="extra-panel" style="display: none;">
+            <div class="extra-music-player">
+              <button type="button" id="open-music-player" class="music-player-btn" title="Pop out standalone Music Player">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                <span>Music Player</span>
+              </button>
+            </div>
             <div class="extra-upload">
-              <h4 style="margin:0 0 6px 0">Uploading</h4>
+              <div class="eq-title-row">
+                <h4 style="margin:0">Uploading</h4>
+                <button type="button" class="eq-info-btn" id="upload-info-toggle" aria-expanded="false" aria-controls="upload-info-popover" aria-label="About uploaded data and local processing">ⓘ</button>
+                <div class="eq-info-popover hidden" id="upload-info-popover" role="tooltip">
+                  <p><strong>Local Processing Only:</strong> Uploaded FR files, targets, and songs are processed directly in your browser—nothing is sent over the network.</p>
+                  <p><strong>Non-Persistent Session:</strong> Uploaded FR curves, targets, and single-track demo audio are kept in memory only and reset on refresh.</p>
+                </div>
+              </div>
               <div class="extra-upload-buttons">
                 <button class="upload-fr">Upload FR</button>
                 <button class="upload-target">Upload Target</button>
@@ -200,7 +213,41 @@ doc.html(`
                 <form style="display:none"><input type="file" id="file-fr" accept=".csv,.txt" /></form>
                 <form style="display:none"><input type="file" id="file-audio" accept="audio/*" /></form>
               </div>
-              <span style="margin: 0 0 1em 0"><small>Uploaded data will not be persistent</small></span>
+            </div>
+            <div class="extra-demo">
+              <div class="eq-demo-header">
+                <h4 style="margin: 0">EQ Demo</h4>
+                <select class="eq-track">
+                    <option value="pink" selected>Pink Noise</option>
+                    <option value="scarlet">Scarlet Fire</option>
+                    <option value="tone">Tone Generator</option>
+                    <option value="custom-eq-track">Uploaded</option>
+                </select>
+              </div>
+              <div class="eq-demo">
+                <span id="songTime">00:00:00</span>
+                <input name="demo-time" type="range" min="0" max="100" step="1" value="0"></input>
+                <div class="volume-button">
+                  <div class="volume-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M6 7l8-5v20l-8-5v-10zm-6 10h4v-10h-4v10zm20.264-13.264l-1.497 1.497c1.847 1.783 2.983 4.157 2.983 6.767 0 2.61-1.135 4.984-2.983 6.766l1.498 1.498c2.305-2.153 3.735-5.055 3.735-8.264s-1.43-6.11-3.736-8.264zm-.489 8.264c0-2.084-.915-3.967-2.384-5.391l-1.503 1.503c1.011 1.049 1.637 2.401 1.637 3.888 0 1.488-.623 2.841-1.634 3.891l1.503 1.503c1.468-1.424 2.381-3.309 2.381-5.394z"/></svg>
+                  </div>
+                  <div class="volume-slider">
+                    <input type="range" min="0" max="100" step="0.5" value="70" id="volumeRange">
+                  </div>
+                </div>
+                <div id="play-button" style="fill: var(--accent-color-contrast) !important;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 22v-20l18 10-18 10z"/></svg>
+                </div>
+              </div>
+              <div class="settings-row hidden" name="tone-gen-range" style="margin-top:0;">
+                <span name="title">Tone Generator Range</span>
+                <span><input name="tone-generator-from" type="number" min="20" max="20000" step="1" value="20"></input></span>
+                <span><input name="tone-generator-to" type="number" min="20" max="20000" step="1" value="20000"></input></span>
+              </div>
+              <div class="eq-demo hidden" name="tone-gen-slider" style="margin:2px 0 6px 0;">
+                <span name="current-freq">Freq: <span class="freq-text">20</span> Hz</span>
+                <input name="tone-generator-freq" type="range" min="0" max="1" step="0.0001" value="0" />
+              </div>
             </div>
             <div class="extra-eq">
               <div class="eq-title-row">
@@ -245,7 +292,7 @@ doc.html(`
                       </select>
                     </span>
                     <span><input name="freq" type="number" min="20" max="20000" step="1" value="60"></input></span>
-                    <span><input name="gain" type="number" min="-40" max="40" step="0.5" value="0"></input></span>
+                    <span><input name="gain" type="number" min="-40" max="40" step="0.1" value="0"></input></span>
                     <span><input name="q" type="number" min="0" max="10" step="0.01" value="0.71"></input></span>
                 </div>
               </div>
@@ -313,39 +360,6 @@ doc.html(`
                     <button type="button" class="fft-speed" data-speed="fast">Fast</button>
                   </div>
                 </div>
-              </div>
-              <div class="eq-demo-header">
-                <h4 style="margin: 0">EQ Demo</h4>
-                <select class="eq-track">
-                    <option value="pink" selected>Pink Noise</option>
-                    <option value="scarlet">Scarlet Fire</option>
-                    <option value="tone">Tone Generator</option>
-                    <option value="custom-eq-track">Uploaded</option>
-                </select>
-              </div>
-              <div class="eq-demo">
-                <span id="songTime">00:00:00</span>
-                <input name="demo-time" type="range" min="0" max="100" step="1" value="0"></input>
-                <div class="volume-button">
-                  <div class="volume-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M6 7l8-5v20l-8-5v-10zm-6 10h4v-10h-4v10zm20.264-13.264l-1.497 1.497c1.847 1.783 2.983 4.157 2.983 6.767 0 2.61-1.135 4.984-2.983 6.766l1.498 1.498c2.305-2.153 3.735-5.055 3.735-8.264s-1.43-6.11-3.736-8.264zm-.489 8.264c0-2.084-.915-3.967-2.384-5.391l-1.503 1.503c1.011 1.049 1.637 2.401 1.637 3.888 0 1.488-.623 2.841-1.634 3.891l1.503 1.503c1.468-1.424 2.381-3.309 2.381-5.394z"/></svg>
-                  </div>
-                  <div class="volume-slider">
-                    <input type="range" min="0" max="100" step="0.5" value="70" id="volumeRange">
-                  </div>
-                </div>
-                <div id="play-button" style="fill: var(--accent-color-contrast) !important;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 22v-20l18 10-18 10z"/></svg>
-                </div>
-              </div>
-              <div class="settings-row hidden" name="tone-gen-range" style="margin-top:0;">
-                <span name="title">Tone Generator Range</span>
-                <span><input name="tone-generator-from" type="number" min="20" max="20000" step="1" value="20"></input></span>
-                <span><input name="tone-generator-to" type="number" min="20" max="20000" step="1" value="20000"></input></span>
-              </div>
-              <div class="eq-demo hidden" name="tone-gen-slider" style="margin:2px 0 6px 0;">
-                <span name="current-freq">Freq: <span class="freq-text">20</span> Hz</span>
-                <input name="tone-generator-freq" type="range" min="0" max="1" step="0.0001" value="0" />
               </div>
               <h4 style="margin:0 0 3px 0">Miscellaneous</h4>
               <div class="settings-row" name="tone-gen-range" style="margin-top:0; text-align:center">
@@ -1547,6 +1561,7 @@ function loadFiles(p, callback) {
     if (parsedResultCache.has(p.fileName)) {
         let cached = parsedResultCache.get(p.fileName);
         p.sampleLabels = cached.sampleLabels;
+        p.sampleSeatings = cached.sampleSeatings;
         p.nonStandardSmoothing = cached.nonStandardSmoothing;
         callback(cached.channels);
         return Promise.resolve(cached.channels);
@@ -1560,6 +1575,7 @@ function loadFiles(p, callback) {
                 let cached = parsedResultCache.get(p.fileName);
                 if (cached) {
                     p.sampleLabels = cached.sampleLabels;
+                    p.sampleSeatings = cached.sampleSeatings;
                     p.nonStandardSmoothing = cached.nonStandardSmoothing;
                 }
             }
@@ -1608,6 +1624,7 @@ function loadFiles(p, callback) {
                 let maxCount = Math.max(...perChannel.map(c => c.length), 1);
                 let channels = [];
                 let labels = [];
+                let seatings = [];
 
                 perChannel.forEach((samples, chIdx) => {
                     let s = LR[chIdx];
@@ -1615,17 +1632,21 @@ function loadFiles(p, callback) {
                         if (i < samples.length) {
                             channels.push(Equalizer.interp(f_values, samples[i].data));
                             labels.push(samples[i].label);
+                            seatings.push(samples[i].seatingNum);
                         } else if (samples.length > 0) {
                             channels.push(null);
                             labels.push(s + (i + 1));
+                            seatings.push(null);
                         } else {
                             channels.push(null);
                             labels.push(s);
+                            seatings.push(null);
                         }
                     }
                 });
 
                 p.sampleLabels = labels;
+                p.sampleSeatings = seatings;
 
                 let nonStandardSmooth = [];
                 validResults.forEach(r => {
@@ -1638,6 +1659,7 @@ function loadFiles(p, callback) {
                 parsedResultCache.set(p.fileName, {
                     channels: channels,
                     sampleLabels: labels,
+                    sampleSeatings: seatings,
                     nonStandardSmoothing: p.nonStandardSmoothing
                 });
 
@@ -1676,14 +1698,14 @@ function loadFiles(p, callback) {
                     for (let i = 1; i <= maxSeatings; i++) {
                         let data = frs[offset + i];
                         if (data !== null) {
-                            numbered.push({ label: s + i, data: data });
+                            numbered.push({ label: s + i, seatingNum: i, data: data });
                         }
                     }
                     if (numbered.length > 0) {
                         perChannel.push(numbered);
                         total += numbered.length;
                     } else if (unnum !== null) {
-                        perChannel.push([{ label: s, data: unnum }]);
+                        perChannel.push([{ label: s, seatingNum: 1, data: unnum }]);
                         total += 1;
                     } else {
                         perChannel.push([]);
@@ -1700,23 +1722,28 @@ function loadFiles(p, callback) {
                 let maxCount = Math.max(...perChannel.map(c => c.length));
                 let channels = [];
                 let labels = [];
+                let seatings = [];
                 perChannel.forEach((samples, idx) => {
                     let s = LR[idx];
                     for (let i = 0; i < maxCount; i++) {
                         if (i < samples.length) {
                             channels.push(Equalizer.interp(f_values, samples[i].data));
                             labels.push(samples[i].label);
+                            seatings.push(samples[i].seatingNum);
                         } else if (samples.length > 0) {
                             channels.push(null);
                             labels.push(s + (i + 1));
+                            seatings.push(null);
                         } else {
                             channels.push(null);
                             labels.push(s);
+                            seatings.push(null);
                         }
                     }
                 });
 
                 p.sampleLabels = labels;
+                p.sampleSeatings = seatings;
 
                 let nonStandardSmooth = [];
                 perChannel.forEach(samples => {
@@ -1731,6 +1758,7 @@ function loadFiles(p, callback) {
                 parsedResultCache.set(p.fileName, {
                     channels: channels,
                     sampleLabels: labels,
+                    sampleSeatings: seatings,
                     nonStandardSmoothing: p.nonStandardSmoothing
                 });
 
@@ -1775,19 +1803,30 @@ function getAvgArithmetic(p) {
     let v = validChannels(p);
     return v.length===1 ? v[0] : avgCurvesArithmetic(v);
 }
+// Channel imbalance detector disabled for MIRE: fixed to average all L vs. all R seatings
+// (instead of upstream p.channels[0] vs p.channels[1], which compared L1 vs L2), then
+// commented out because natural human-ear/fit L/R asymmetry triggers arbitrary false positives.
+/*
 function hasImbalance(p) {
-    if (!hasChannelSel(p) || !p.channels || !p.channels[0] || !p.channels[1]) return false;
-    let as = p.channels[0], bs = p.channels[1];
-    let s0=0, s1=0;
-    return as.some((a,i) => {
+    if (notMultichannel(p) || !p || !p.channels || p.channels.length < 2) return false;
+    let n = Math.floor(p.channels.length / LR.length);
+    if (n < 1) n = 1;
+    let leftChannels = p.channels.slice(0, n).filter(c => c !== null);
+    let rightChannels = p.channels.slice(n, 2 * n).filter(c => c !== null);
+    if (!leftChannels.length || !rightChannels.length) return false;
+    let as = leftChannels.length === 1 ? leftChannels[0] : avgCurves(leftChannels);
+    let bs = rightChannels.length === 1 ? rightChannels[0] : avgCurves(rightChannels);
+    let s0 = 0, s1 = 0;
+    return as.some((a, i) => {
         if (!bs[i]) return false;
-        let d = a[1]-bs[i][1];
-        d *= 1/(50 * Math.sqrt(1+Math.pow(a[0]/1e4,6)));
-        s0 = Math.max(s0+d,0);
-        s1 = Math.max(s1-d,0);
-        return Math.max(s0,s1) > max_channel_imbalance;
+        let d = a[1] - bs[i][1];
+        d *= 1 / (50 * Math.sqrt(1 + Math.pow(a[0] / 1e4, 6)));
+        s0 = Math.max(s0 + d, 0);
+        s1 = Math.max(s1 - d, 0);
+        return Math.max(s0, s1) > max_channel_imbalance;
     });
 }
+*/
 
 var activePhones = [];
 let baseline0 = { p:null, l:null, fn:l=>l },
@@ -1819,19 +1858,70 @@ let table = doc.select(".curves");
 // hclToHex, createPopupMenu, cpCircles, colorPhones) lives in
 // assets/js/phoneTable.js.
 
+function getChannelSamples(p, chKey) {
+    if (!p || !p.channels || !p.channels.length) return [];
+    let n = Math.floor(p.channels.length / LR.length);
+    if (n < 1) n = 1;
+    let start = chKey === "R" ? n : 0;
+    let end = chKey === "R" ? Math.min(2 * n, p.channels.length) : Math.min(n, p.channels.length);
+    let samples = [];
+    for (let idx = start; idx < end; idx++) {
+        let c = p.channels[idx];
+        if (c !== null && c !== undefined) {
+            let fallbackSeat = (idx - start) + 1;
+            let seatNum = (p.sampleSeatings && p.sampleSeatings[idx] != null) ? p.sampleSeatings[idx] : fallbackSeat;
+            let label = (p.sampleLabels && p.sampleLabels[idx]) ? p.sampleLabels[idx] : (chKey + seatNum);
+            samples.push({ idx: idx, slot: idx - start, seatNum: seatNum, label: label, curve: c });
+        }
+    }
+    return samples;
+}
+
+function getAvailableChannelInfo(p) {
+    let left = getChannelSamples(p, "L");
+    let right = getChannelSamples(p, "R");
+    let hasL = left.length > 0;
+    let hasR = right.length > 0;
+    let hasLR = hasL && hasR;
+    let soloChannel = (hasL && !hasR) ? "L" : (!hasL && hasR) ? "R" : null;
+    let soloSamples = soloChannel === "L" ? left : (soloChannel === "R" ? right : []);
+    let soloSeating = soloSamples.length === 1 ? soloSamples[0].seatNum : null;
+    return {
+        hasL: hasL,
+        hasR: hasR,
+        hasLR: hasLR,
+        left: left,
+        right: right,
+        soloChannel: soloChannel,
+        soloSeating: soloSeating
+    };
+}
+
+function isChannelAvailable(p, chKey) {
+    let info = getAvailableChannelInfo(p);
+    if (chKey === "L") return info.hasL;
+    if (chKey === "R") return info.hasR;
+    if (chKey === "LR") return info.hasLR;
+    return false;
+}
+
 function setCurves(p, avg, lr, samp, seating) {
     if (p.is90Bounds) avg = false;
     let n = Math.floor((p.channels ? p.channels.length : 0) / LR.length);
     if (n < 1) n = 1;
 
+    let avail = p.isTarget ? { hasL: true, hasR: false, hasLR: false, left: [], right: [] } : getAvailableChannelInfo(p);
+
     // Initialize or migrate p.channelState if missing
     if (!p.channelState) {
         let isSoloRight = (lr === 1);
+        let isSoloLeft = (lr === 0);
         let isBothAvg = (avg === true || p.avg === true);
+        let initSeat = p.seating || "avg";
         p.channelState = {
-            L: { visible: !isSoloRight && !isBothAvg, seating: p.seating || "avg" },
-            R: { visible: true, seating: p.seating || "avg" },
-            LR: { visible: isBothAvg, seating: p.seating || "avg" }
+            L: { visible: !isSoloRight && !isBothAvg, seating: initSeat },
+            R: { visible: !isSoloLeft && !isBothAvg, seating: initSeat },
+            LR: { visible: isBothAvg, seating: initSeat }
         };
     } else {
         // Handle explicit legacy parameter calls (e.g. from showPhone, removePhone, #avg-all)
@@ -1844,7 +1934,7 @@ function setCurves(p, avg, lr, samp, seating) {
                 p.channelState.L.visible = false;
                 p.channelState.R.visible = true;
                 p.channelState.LR.visible = false;
-            } else if (lr === null || lr === undefined) {
+            } else if (lr === null) {
                 p.channelState.L.visible = true;
                 p.channelState.R.visible = true;
                 p.channelState.LR.visible = false;
@@ -1872,6 +1962,42 @@ function setCurves(p, avg, lr, samp, seating) {
         }
     }
 
+    // Clamp unavailable channels and fall back gracefully so single-channel curves never render blank
+    if (!p.isTarget && p.channels) {
+        if (!avail.hasL) p.channelState.L.visible = false;
+        if (!avail.hasR) p.channelState.R.visible = false;
+        if (!avail.hasLR) p.channelState.LR.visible = false;
+
+        // If the active visibility points only to missing channel(s), reveal whichever channel exists
+        if (!p.channelState.L.visible && !p.channelState.R.visible && !p.channelState.LR.visible) {
+            if (avail.hasR && !avail.hasL) {
+                p.channelState.R.visible = true;
+            } else if (avail.hasL && !avail.hasR) {
+                p.channelState.L.visible = true;
+            } else if (avail.hasL && avail.hasR) {
+                p.channelState.L.visible = true;
+                p.channelState.R.visible = true;
+            }
+        }
+
+        // Default single-seating channels cleanly to their actual seating number
+        if (avail.left.length === 1) {
+            p.channelState.L.seating = String(avail.left[0].seatNum);
+        } else if (p.channelState.L.seating !== "avg" && p.channelState.L.seating !== "all") {
+            let sNumL = parseInt(p.channelState.L.seating, 10);
+            if (!avail.left.some(s => s.seatNum === sNumL)) p.channelState.L.seating = "avg";
+        }
+        if (avail.right.length === 1) {
+            p.channelState.R.seating = String(avail.right[0].seatNum);
+        } else if (p.channelState.R.seating !== "avg" && p.channelState.R.seating !== "all") {
+            let sNumR = parseInt(p.channelState.R.seating, 10);
+            if (!avail.right.some(s => s.seatNum === sNumR)) p.channelState.R.seating = "avg";
+        }
+        if (avail.hasLR && avail.left.length === 1 && avail.right.length === 1 && avail.left[0].seatNum === avail.right[0].seatNum) {
+            p.channelState.LR.seating = String(avail.left[0].seatNum);
+        }
+    }
+
     // Sync legacy properties on p so existing external helpers don't break
     p.avg = !!p.channelState.LR.visible;
     if (p.channelState.L.visible && !p.channelState.R.visible && !p.channelState.LR.visible) {
@@ -1894,63 +2020,78 @@ function setCurves(p, avg, lr, samp, seating) {
         let state = p.channelState;
 
         // 1. Left Channel
-        if (state.L && state.L.visible && p.channels) {
+        if (state.L && state.L.visible && avail.hasL) {
             let st = state.L.seating;
-            let leftChannels = p.channels.slice(0, n).filter(c => c !== null);
-            if (st === "all" && n > 1) {
-                leftChannels.forEach((c, idx) => {
-                    let lbl = (p.sampleLabels && p.sampleLabels[idx]) ? p.sampleLabels[idx] : ("- - L" + (idx + 1));
-                    curves.push(pc(lbl, c, 0, { channel: "L", chIdx: 0, sIdx: idx, sCount: n }));
+            let leftSamples = avail.left;
+            if (st === "all" && leftSamples.length > 1) {
+                leftSamples.forEach((s, i) => {
+                    curves.push(pc(s.label, s.curve, 0, { channel: "L", chIdx: 0, sIdx: i, sCount: leftSamples.length, seatNum: s.seatNum }));
                 });
             } else {
                 let seatNum = parseInt(st, 10);
-                if (!isNaN(seatNum) && seatNum >= 1 && seatNum <= n) {
-                    let c = p.channels[seatNum - 1];
-                    let lbl = (p.sampleLabels && p.sampleLabels[seatNum - 1]) ? p.sampleLabels[seatNum - 1] : ("- - L" + seatNum);
-                    curves.push(pc(lbl, c, 0, { channel: "L", chIdx: 0, sIdx: seatNum - 1, sCount: n }));
-                } else if (leftChannels.length > 0) {
-                    curves.push(pc("- - L", avgCurves(leftChannels), 0, { channel: "L", chIdx: 0, sIdx: 0, sCount: 1 }));
+                let matched = !isNaN(seatNum) ? leftSamples.find(s => s.seatNum === seatNum) : null;
+                if (matched) {
+                    curves.push(pc(matched.label, matched.curve, 0, { channel: "L", chIdx: 0, sIdx: matched.slot, sCount: leftSamples.length, seatNum: matched.seatNum }));
+                } else if (leftSamples.length === 1) {
+                    let onlyL = leftSamples[0];
+                    curves.push(pc(onlyL.label, onlyL.curve, 0, { channel: "L", chIdx: 0, sIdx: 0, sCount: 1, seatNum: onlyL.seatNum }));
+                } else {
+                    curves.push(pc("- - L", avgCurves(leftSamples.map(s => s.curve)), 0, { channel: "L", chIdx: 0, sIdx: 0, sCount: 1 }));
                 }
             }
         }
 
         // 2. Right Channel
-        if (state.R && state.R.visible && p.channels) {
+        if (state.R && state.R.visible && avail.hasR) {
             let st = state.R.seating;
-            let rightChannels = p.channels.slice(n, 2 * n).filter(c => c !== null);
-            if (st === "all" && n > 1) {
-                rightChannels.forEach((c, idx) => {
-                    let lbl = (p.sampleLabels && p.sampleLabels[n + idx]) ? p.sampleLabels[n + idx] : ("─ R" + (idx + 1));
-                    curves.push(pc(lbl, c, 1, { channel: "R", chIdx: 1, sIdx: idx, sCount: n }));
+            let rightSamples = avail.right;
+            if (st === "all" && rightSamples.length > 1) {
+                rightSamples.forEach((s, i) => {
+                    curves.push(pc(s.label, s.curve, 1, { channel: "R", chIdx: 1, sIdx: i, sCount: rightSamples.length, seatNum: s.seatNum }));
                 });
             } else {
                 let seatNum = parseInt(st, 10);
-                if (!isNaN(seatNum) && seatNum >= 1 && seatNum <= n) {
-                    let c = p.channels[n + seatNum - 1];
-                    let lbl = (p.sampleLabels && p.sampleLabels[n + seatNum - 1]) ? p.sampleLabels[n + seatNum - 1] : ("─ R" + seatNum);
-                    curves.push(pc(lbl, c, 1, { channel: "R", chIdx: 1, sIdx: seatNum - 1, sCount: n }));
-                } else if (rightChannels.length > 0) {
-                    curves.push(pc("─ R", avgCurves(rightChannels), 1, { channel: "R", chIdx: 1, sIdx: 0, sCount: 1 }));
+                let matched = !isNaN(seatNum) ? rightSamples.find(s => s.seatNum === seatNum) : null;
+                if (matched) {
+                    curves.push(pc(matched.label, matched.curve, 1, { channel: "R", chIdx: 1, sIdx: matched.slot, sCount: rightSamples.length, seatNum: matched.seatNum }));
+                } else if (rightSamples.length === 1) {
+                    let onlyR = rightSamples[0];
+                    curves.push(pc(onlyR.label, onlyR.curve, 1, { channel: "R", chIdx: 1, sIdx: 0, sCount: 1, seatNum: onlyR.seatNum }));
+                } else {
+                    curves.push(pc("─ R", avgCurves(rightSamples.map(s => s.curve)), 1, { channel: "R", chIdx: 1, sIdx: 0, sCount: 1 }));
                 }
             }
         }
 
         // 3. L+R Combined
-        if (state.LR && state.LR.visible && p.channels) {
+        if (state.LR && state.LR.visible && avail.hasLR) {
             let st = state.LR.seating;
             let allValid = p.channels.filter(c => c !== null);
-            if (st === "all" && n > 1) {
-                for (let idx = 0; idx < n; idx++) {
-                    let pair = [p.channels[idx], p.channels[n + idx]].filter(c => c !== null);
+            let allSeatNums = Array.from(new Set([
+                ...avail.left.map(s => s.seatNum),
+                ...avail.right.map(s => s.seatNum)
+            ])).sort((a, b) => a - b);
+
+            if (st === "all" && allSeatNums.length > 1) {
+                allSeatNums.forEach((sn, idx) => {
+                    let lSamp = avail.left.find(s => s.seatNum === sn);
+                    let rSamp = avail.right.find(s => s.seatNum === sn);
+                    let pair = [lSamp && lSamp.curve, rSamp && rSamp.curve].filter(Boolean);
                     if (pair.length) {
-                        curves.push(pc("AVG " + (idx + 1), avgCurves(pair), undefined, { channel: "AVG", sIdx: idx, sCount: n }));
+                        curves.push(pc("AVG " + sn, avgCurves(pair), undefined, { channel: "AVG", sIdx: idx, sCount: allSeatNums.length, seatNum: sn }));
                     }
-                }
+                });
             } else {
                 let seatNum = parseInt(st, 10);
-                if (!isNaN(seatNum) && seatNum >= 1 && seatNum <= n) {
-                    let pair = [p.channels[seatNum - 1], p.channels[n + seatNum - 1]].filter(c => c !== null);
-                    curves.push(pc("AVG " + seatNum, avgCurves(pair), undefined, { channel: "AVG", sIdx: seatNum - 1, sCount: n }));
+                if (!isNaN(seatNum)) {
+                    let lSamp = avail.left.find(s => s.seatNum === seatNum);
+                    let rSamp = avail.right.find(s => s.seatNum === seatNum);
+                    let pair = [lSamp && lSamp.curve, rSamp && rSamp.curve].filter(Boolean);
+                    if (pair.length) {
+                        curves.push(pc("AVG " + seatNum, avgCurves(pair), undefined, { channel: "AVG", sIdx: 0, sCount: allSeatNums.length, seatNum: seatNum }));
+                    } else if (allValid.length > 0) {
+                        curves.push(pc("AVG", avgCurves(allValid), undefined, { channel: "AVG", sIdx: 0, sCount: 1 }));
+                    }
                 } else if (allValid.length > 0) {
                     curves.push(pc("AVG", avgCurves(allValid), undefined, { channel: "AVG", sIdx: 0, sCount: 1 }));
                 }
@@ -2189,7 +2330,7 @@ norms.select("input")
 norms.select("span").on("click", (_,i)=>setNorm(_,i,false));
 
 function showPhone(p, exclusive, suppressVariant, trigger) {
-    if (!p.copyOf && p.fileNames && p.fileNames.length && p.fileName !== p.fileNames[0]) {
+    if (!trigger && !p.copyOf && p.fileNames && p.fileNames.length && p.fileName !== p.fileNames[0]) {
         p.fileName = p.fileNames[0];
         p.dispName = (p.dispNames && p.dispNames[0]) ? p.dispNames[0] : p.fileNames[0];
         if (p.vars && p.vars[p.fileName]) {
@@ -2261,6 +2402,10 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
     normalizePhone(p); p.offset=p.offset||0;
     let isComparePhone = q => !q.isTarget && !q.isPrefBounds && !q.eqParent;
     if (exclusive) {
+        activePhones.filter(q => !keep(q)).forEach(q => {
+            delete q._userChannelOverride;
+            delete q._autoSynced;
+        });
         activePhones = activePhones.filter(q => q.active = keep(q));
         if (baseline.p && !baseline.p.active) {
             if (baseline.p.phone != customTiltName && !dfBaseline) setBaseline(baseline0,1);
@@ -2269,25 +2414,72 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         if (apRem.length === 1) {
             if (apRem[0].eq && apRem[0].eq.active) {
                 let wantAvg = !apRem[0].eq.hasChannelSplits;
-                setCurves(apRem[0], wantAvg, undefined);
-                setCurves(apRem[0].eq, wantAvg, undefined);
+                setCurves(apRem[0], wantAvg, undefined, undefined, apRem[0]._userChannelOverride ? undefined : "avg");
+                setCurves(apRem[0].eq, wantAvg, undefined, undefined, apRem[0]._userChannelOverride ? undefined : "avg");
             } else {
-                setCurves(apRem[0], false, undefined);
+                setCurves(apRem[0], false, undefined, undefined, apRem[0]._userChannelOverride ? undefined : "avg");
             }
         }
     }
     if (activePhones.indexOf(p)===-1) {
         let avg = false;
         let eqDefaultAvg = undefined;
+        let newTargetLr = undefined;
+        let newTargetSeating = undefined;
         if (!p.isTarget) {
             let ap = activePhones.filter(isComparePhone);
             if (!p.eqParent) {
-                avg = ap.length >= 1;
-                if (avg && ap.length===1 && ap[0].activeCurves.length!==1) {
-                    setCurves(ap[0], false, 1);
-                }
-                if (avg && ap.length===1 && ap[0].eq && ap[0].eq.active && ap[0].eq.activeCurves.length!==1) {
-                    setCurves(ap[0].eq, false, 1);
+                if (ap.length >= 1) {
+                    avg = true;
+                    // Determine smart channel & seating defaults when comparing with single-channel modes
+                    let pInfo = getAvailableChannelInfo(p);
+                    let singlePhones = [p].concat(ap).filter(q => getAvailableChannelInfo(q).soloChannel !== null);
+                    let primarySingle = pInfo.soloChannel ? p : (singlePhones.length ? singlePhones[0] : null);
+                    let primaryInfo = primarySingle ? getAvailableChannelInfo(primarySingle) : null;
+                    let targetCh = primaryInfo ? primaryInfo.soloChannel : "R";
+                    let targetLr = targetCh === "L" ? 0 : 1;
+
+                    // New phone gets matched channel + exact seating if comparing with a single-side sibling
+                    if (!pInfo.soloChannel) {
+                        newTargetLr = targetLr;
+                        if (primarySingle && primaryInfo.soloSeating != null && (p.copyOf || p) === (primarySingle.copyOf || primarySingle)) {
+                            let targetSamples = targetCh === "L" ? pInfo.left : pInfo.right;
+                            if (targetSamples.some(s => s.seatNum === primaryInfo.soloSeating)) {
+                                newTargetSeating = String(primaryInfo.soloSeating);
+                            } else {
+                                newTargetSeating = "avg";
+                            }
+                        } else {
+                            newTargetSeating = "avg";
+                        }
+                    }
+
+                    // Existing comparison phones auto-default to matching channel + seating (if sibling & available)
+                    ap.forEach(q => {
+                        if (q._userChannelOverride) return;
+                        let qInfo = getAvailableChannelInfo(q);
+                        if (qInfo.soloChannel !== null) return;
+                        let qSeat = "avg";
+                        if (primarySingle && primaryInfo.soloSeating != null && (q.copyOf || q) === (primarySingle.copyOf || primarySingle)) {
+                            let qSamples = targetCh === "L" ? qInfo.left : qInfo.right;
+                            if (qSamples.some(s => s.seatNum === primaryInfo.soloSeating)) {
+                                qSeat = String(primaryInfo.soloSeating);
+                            }
+                        } else if (ap.length > 1 && q.channelState) {
+                            // Keep already-synced seating when adding 3rd+ curve if same channel
+                            let curVisibleCh = q.channelState.L.visible ? "L" : (q.channelState.R.visible ? "R" : null);
+                            if (curVisibleCh === targetCh && q.seating && q.seating !== "avg") {
+                                qSeat = q.seating;
+                            }
+                        }
+                        if (ap.length === 1 || primarySingle === p) {
+                            q._autoSynced = true;
+                            setCurves(q, false, targetLr, undefined, qSeat);
+                            if (q.eq && q.eq.active) {
+                                setCurves(q.eq, false, targetLr, undefined, qSeat);
+                            }
+                        }
+                    });
                 }
                 activePhones.push(p);
                 if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
@@ -2310,7 +2502,9 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
             activePhones.unshift(p);
         }
         p.active = true;
-        setCurves(p, eqDefaultAvg !== undefined ? eqDefaultAvg : false, avg ? 1 : undefined);
+        let finalLr = newTargetLr !== undefined ? newTargetLr : (avg ? 1 : undefined);
+        if (newTargetSeating !== undefined) p._autoSynced = true;
+        setCurves(p, eqDefaultAvg !== undefined ? eqDefaultAvg : false, finalLr, undefined, newTargetSeating);
     }
     if (p.isTarget && tiltableTargets.includes(p.dispName) && p.phone !== "Custom Tilt") { // Tilt the target
         if (p.dispName === "Fc-Construct DF-HRTF") {
@@ -2390,16 +2584,20 @@ function removePhone(p) {
         p.eqParent.eq = null;
     }
     p.active = p.pin = false; nextPN = null;
+    delete p._userChannelOverride;
+    delete p._autoSynced;
     activePhones = activePhones.filter(q => q.active);
     if (!p.isTarget) {
         let ap = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent);
         if (ap.length === 1) {
+            let restoreSeat = ap[0]._userChannelOverride ? undefined : "avg";
+            delete ap[0]._autoSynced;
             if (ap[0].eq && ap[0].eq.active) {
                 let wantAvg = !ap[0].eq.hasChannelSplits;
-                setCurves(ap[0], wantAvg, undefined);
-                setCurves(ap[0].eq, wantAvg, undefined);
+                setCurves(ap[0], wantAvg, undefined, undefined, restoreSeat);
+                setCurves(ap[0].eq, wantAvg, undefined, undefined, restoreSeat);
             } else {
-                setCurves(ap[0], false, undefined);
+                setCurves(ap[0], false, undefined, undefined, restoreSeat);
             }
         }
         if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
@@ -3339,7 +3537,7 @@ doc.select("#inspector").on("click", function () {
     }
 });
 
-gr.append("rect")
+let graphInteractRect = gr.append("rect")
     .attrs({x:pad.l,y:pad.t,width:W,height:H,opacity:0})
     .on("mousemove", graphInteract())
     .on("mouseout", () => {
@@ -3349,7 +3547,16 @@ gr.append("rect")
             pathHL(false);
         }
     })
-    .on("click", graphInteract(true));
+    .on("click", graphInteract(true))
+    .on("dblclick", function () {
+        if (typeof window.onGraphDoubleClickEQ === "function") {
+            window.onGraphDoubleClickEQ(d3.mouse(this));
+        }
+    });
+
+let eqHandlesLayer = gr.append("g")
+    .attr("class", "eq-handles-layer")
+    .attr("mask", "url(#graphFade)");
 
 
 // ==========================================

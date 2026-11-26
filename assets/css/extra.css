@@ -353,6 +353,105 @@ g.eq-overlay-layer path.eq-overlay-line.is-flat {
   stroke-width: 1.25px;
 }
 
+g.eq-overlay-layer path.eq-band-preview {
+  fill: var(--eq-overlay-fill);
+  stroke: var(--eq-overlay-color);
+  stroke-width: 1.2px;
+  stroke-opacity: 0.65;
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+g.eq-overlay-layer path.eq-band-preview.is-bypassed {
+  opacity: 0.25;
+}
+
+g.eq-handles-layer {
+  pointer-events: none;
+}
+
+g.eq-handles-layer.is-tool-blocked,
+g.eq-handles-layer.is-tool-blocked * {
+  pointer-events: none !important;
+}
+
+g.eq-handles-layer.is-tool-blocked {
+  opacity: 0.35;
+}
+
+g.eq-handles-layer.is-bypassed .eq-band-handle {
+  opacity: 0.45;
+}
+
+g.eq-handles-layer .eq-band-handle {
+  cursor: grab;
+  pointer-events: all;
+  touch-action: none;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  transition: opacity 120ms ease;
+}
+
+g.eq-handles-layer .eq-band-handle.is-dragging {
+  cursor: grabbing;
+}
+
+g.eq-handles-layer .eq-band-handle .eq-handle-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
+g.eq-handles-layer .eq-band-handle .eq-handle-dot {
+  fill: var(--eq-overlay-color);
+  fill-opacity: 0.60;
+  stroke: var(--background-color-graph);
+  stroke-opacity: 0.65;
+  stroke-width: 1px;
+  pointer-events: all;
+  transition: r 100ms ease, fill-opacity 100ms ease;
+}
+
+g.eq-handles-layer .eq-band-handle:hover .eq-handle-dot,
+g.eq-handles-layer .eq-band-handle.is-active .eq-handle-dot,
+g.eq-handles-layer .eq-band-handle.is-dragging .eq-handle-dot {
+  fill-opacity: 0.86;
+  stroke-opacity: 0.90;
+  stroke-width: 1.2px;
+}
+
+g.eq-handles-layer .eq-band-handle .eq-handle-num {
+  fill: var(--eq-handle-text, #ffffff);
+  fill-opacity: 0.92;
+  font-family: var(--font-primary);
+  font-size: 7.5px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+g.eq-handles-layer .eq-handle-tooltip-group,
+g.eq-handles-layer .eq-handle-tooltip,
+g.eq-handles-layer .eq-handle-tooltip * {
+  pointer-events: none;
+}
+
+g.eq-handles-layer .eq-handle-tooltip rect {
+  fill: var(--inspector-bg, var(--background-color-inputs));
+  stroke: var(--inspector-border, var(--background-color-contrast-more));
+  stroke-width: 1px;
+  opacity: 0.90;
+}
+
+g.eq-handles-layer .eq-handle-tooltip text {
+  fill: var(--inspector-text, var(--font-color-primary));
+  font-family: var(--font-secondary);
+  font-size: 8.5px;
+  font-weight: 600;
+  dominant-baseline: central;
+}
+
 /** extra panel **/
 
 div.extra-panel {
@@ -361,7 +460,51 @@ div.extra-panel {
 }
 
 div.extra-panel > div {
-  margin: 0 0 1em 0;
+  margin: 0 0 11px 0;
+}
+
+div.extra-panel > div.extra-eq {
+  margin-bottom: 0;
+}
+
+div.extra-panel > div.extra-music-player {
+  margin: 0 0 10px 0;
+}
+
+div.extra-panel > div.extra-music-player > button.music-player-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 0 !important;
+  padding: 0.65em 0.75em;
+  font-weight: 600;
+  background-color: var(--background-color);
+  border: 1px solid var(--background-color-contrast-more);
+  color: var(--font-color-primary);
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+div.extra-panel > div.extra-music-player > button.music-player-btn span,
+div.extra-panel > div.extra-music-player > button.music-player-btn svg {
+  color: inherit !important;
+}
+
+div.extra-panel > div.extra-music-player > button.music-player-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+div.extra-panel > div.extra-music-player > button.music-player-btn.selected {
+  background-color: var(--background-color-selected) !important;
+  border-color: var(--accent-color) !important;
+  color: var(--font-color-selected) !important;
+}
+
+div.extra-panel > div.extra-music-player > button.music-player-btn svg {
+  flex: 0 0 auto;
+  display: block;
 }
 
 div.extra-panel h5 {
@@ -383,7 +526,7 @@ div.extra-panel div.preamp-row {
 div.extra-panel > div.extra-eq > div.select-eq-phone,
 div.extra-panel > div.extra-eq > div.filters,
 div.extra-panel > div.settings-row,
-div.extra-panel > div.eq-demo {
+div.extra-panel div.eq-demo {
   margin: 0 0 0.5em 0;
 }
 
@@ -464,7 +607,7 @@ div.extra-panel div.settings-row > span > input[type="checkbox"]:checked::before
 }
 
 div.extra-panel > div.extra-eq > div.filters > div.filter > span > select,
-div.extra-eq div.eq-demo-header > select.eq-track {
+div.extra-panel div.eq-demo-header > select.eq-track {
   width: 70%;
   z-index: 1;
   outline: none;
@@ -499,6 +642,12 @@ div.extra-panel div.settings-row > span > input:not([type='checkbox']) {
 
 div.extra-panel > div.extra-eq > div.filters > div.filter > span > input {
   margin-top: 2px;
+}
+
+div.extra-panel > div.extra-eq > div.filters > div.filter.is-handle-active > span > input:not([type='checkbox']),
+div.extra-panel > div.extra-eq > div.filters > div.filter.is-handle-active > span > select {
+  border-color: var(--eq-overlay-color, var(--accent-color));
+  box-shadow: 0 0 0 1px var(--eq-overlay-color, var(--accent-color));
 }
 
 span:has(input[name="freq"]),
@@ -911,20 +1060,23 @@ div.extra-panel button {
   margin-bottom: 4px !important;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo-header,
 div.extra-eq > div.eq-demo-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 8px 0 6px 0;
+  margin: 4px 0 6px 0;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo-header > h4,
 div.extra-eq > div.eq-demo-header > h4 {
   margin: 0;
   white-space: nowrap;
   flex: 0 0 auto;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo-header > select.eq-track,
 div.extra-eq > div.eq-demo-header > select.eq-track {
   width: auto;
   min-width: 88px;
@@ -938,8 +1090,9 @@ div.extra-eq > div.eq-demo-header > select.eq-track {
   white-space: nowrap;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo,
 div.extra-eq > div.eq-demo {
-  margin: 0px 0 8px 0; 
+  margin: 0 0 6px 0;
   display: flex;
   box-sizing: border-box;
   gap: 8px;
@@ -947,26 +1100,32 @@ div.extra-eq > div.eq-demo {
   align-items: center;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo > button,
 div.extra-eq > div.eq-demo > button {
   width: 25% !important;
   margin: 0 !important;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo > span,
 div.extra-eq > div.eq-demo > span {
   text-align: center;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo > #songTime,
 div.extra-eq > div.eq-demo > #songTime {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo > input[name="demo-time"],
 div.extra-eq > div.eq-demo > input[name="demo-time"] {
   flex: 1 1 auto;
   width: auto !important;
   min-width: 80px;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo > input[name="demo-time"],
+div.extra-panel > div.extra-demo > div.eq-demo > input[name="tone-generator-freq"],
 div.extra-eq > div.eq-demo > input[name="demo-time"],
 div.extra-eq > div.eq-demo > input[name="tone-generator-freq"],
 div.settings-row > input[name="balance-vol"] {
@@ -978,6 +1137,7 @@ div.settings-row > input[name="balance-vol"] {
   background-color: var(--background-color-graph) !important;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo > input[name="tone-generator-freq"],
 div.extra-eq > div.eq-demo > input[name="tone-generator-freq"] {
   width: 65% !important;
 }
@@ -987,6 +1147,7 @@ div.settings-row > input[name="balance-vol"] {
   margin:auto;
 }
 
+div.extra-panel > div.extra-demo > div.eq-demo > span[name="current-freq"],
 div.extra-eq > div.eq-demo > span[name="current-freq"] {
   width: 35% !important;
   text-align: left;

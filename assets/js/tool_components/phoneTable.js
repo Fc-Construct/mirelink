@@ -377,25 +377,76 @@ function addChannelControls(tdSelection) {
             return;
         }
 
+        const availInfo = getAvailableChannelInfo(p);
+
         const CHANNELS = [
             { key: "L", label: "Left" },
             { key: "R", label: "Right" },
             { key: "LR", label: "L + R" }
         ];
 
+        const getPillOptions = (chKey) => {
+            if (chKey === "L") {
+                if (!availInfo.hasL) return [];
+                if (availInfo.left.length === 1) {
+                    let s = availInfo.left[0];
+                    return [{ value: String(s.seatNum), label: s.label || ("L" + s.seatNum) }];
+                }
+                return [
+                    { value: "avg", label: "AVG (" + availInfo.left.length + ")" },
+                    { value: "all", label: "ALL (" + availInfo.left.length + ")" },
+                    ...availInfo.left.map(s => ({ value: String(s.seatNum), label: s.label || ("L" + s.seatNum) }))
+                ];
+            }
+            if (chKey === "R") {
+                if (!availInfo.hasR) return [];
+                if (availInfo.right.length === 1) {
+                    let s = availInfo.right[0];
+                    return [{ value: String(s.seatNum), label: s.label || ("R" + s.seatNum) }];
+                }
+                return [
+                    { value: "avg", label: "AVG (" + availInfo.right.length + ")" },
+                    { value: "all", label: "ALL (" + availInfo.right.length + ")" },
+                    ...availInfo.right.map(s => ({ value: String(s.seatNum), label: s.label || ("R" + s.seatNum) }))
+                ];
+            }
+            // L + R
+            if (!availInfo.hasLR) return [];
+            let allSeats = Array.from(new Set([
+                ...availInfo.left.map(s => s.seatNum),
+                ...availInfo.right.map(s => s.seatNum)
+            ])).sort((a, b) => a - b);
+            if (allSeats.length === 1) {
+                return [{ value: String(allSeats[0]), label: "Seat " + allSeats[0] }];
+            }
+            return [
+                { value: "avg", label: "AVG (" + allSeats.length + ")" },
+                { value: "all", label: "ALL (" + allSeats.length + ")" },
+                ...allSeats.map(sn => ({ value: String(sn), label: "Seat " + sn }))
+            ];
+        };
+
         CHANNELS.forEach(ch => {
+            let options = getPillOptions(ch.key);
+            let isAvail = options.length > 0;
+            let hasMulti = options.length > 1;
+
             let pill = container.append("div")
                 .attr("class", "channel-pill")
-                .attr("data-channel", ch.key);
+                .attr("data-channel", ch.key)
+                .attr("data-available", isAvail ? "true" : "false");
 
             // 1. Eye Button
             pill.append("button")
                 .attr("type", "button")
                 .attr("class", "pill-eye")
-                .attr("title", "Toggle " + ch.label + " visibility")
+                .property("disabled", !isAvail)
+                .attr("title", isAvail ? ("Toggle " + ch.label + " visibility") : ("No " + ch.label + " measurement available"))
                 .on("click", function() {
                     d3.event.stopPropagation();
+                    if (!isAvail) return;
                     if (!p.channelState) setCurves(p);
+                    p._userChannelOverride = true;
                     p.channelState[ch.key].visible = !p.channelState[ch.key].visible;
                     updateCurves(p);
                 })
@@ -408,14 +459,19 @@ function addChannelControls(tdSelection) {
             pill.append("button")
                 .attr("type", "button")
                 .attr("class", "pill-label")
-                .attr("title", "Click to cycle AVG / ALL")
+                .property("disabled", !isAvail)
+                .attr("title", !isAvail ? ("No " + ch.label + " measurement available") : (hasMulti ? "Click to cycle AVG / ALL" : (ch.label + " measurement")))
                 .on("click", function() {
                     d3.event.stopPropagation();
+                    if (!isAvail) return;
                     if (!p.channelState) setCurves(p);
-                    let curr = p.channelState[ch.key].seating;
-                    let next = (curr === "all") ? "avg" : "all";
-                    p.channelState[ch.key].seating = next;
-                    p.channelState[ch.key].visible = true; // Ensure visible when cycling
+                    p._userChannelOverride = true;
+                    if (hasMulti) {
+                        let curr = p.channelState[ch.key].seating;
+                        let next = (curr === "all") ? "avg" : "all";
+                        p.channelState[ch.key].seating = next;
+                    }
+                    p.channelState[ch.key].visible = true; // Ensure visible when clicking label
                     updateCurves(p);
                 })
                 .append("span").attr("class", "pill-label-text");
@@ -423,31 +479,23 @@ function addChannelControls(tdSelection) {
             // 3. Chevron Wrap with Native Select Overlay
             let chevronWrap = pill.append("div")
                 .attr("class", "pill-chevron-wrap")
-                .attr("title", "Select seating for " + ch.label);
+                .attr("title", isAvail ? ("Select seating for " + ch.label) : ("No " + ch.label + " measurements"));
 
             chevronWrap.append("span").attr("class", "pill-chevron-icon").text("▾");
 
             let select = chevronWrap.append("select")
                 .attr("class", "pill-native-select")
+                .property("disabled", !isAvail)
                 .on("change", function() {
+                    if (!isAvail) return;
                     let val = this.value;
                     if (!p.channelState) setCurves(p);
+                    p._userChannelOverride = true;
                     p.channelState[ch.key].seating = val;
                     p.channelState[ch.key].visible = true;
                     updateCurves(p);
                 });
 
-            // Populate options dynamically
-            let n = Math.floor(validChannels(p).length / LR.length);
-            if (n < 1) n = 1;
-            let options = [
-                { value: "avg", label: "AVG" + (n > 1 ? " (" + n + ")" : "") },
-                { value: "all", label: "ALL" + (n > 1 ? " (" + n + ")" : "") }
-            ];
-            for (let i = 1; i <= n; i++) {
-                let sLabel = ch.key === "L" ? ("L" + i) : (ch.key === "R" ? ("R" + i) : ("Seat " + i));
-                options.push({ value: String(i), label: sLabel });
-            }
             select.selectAll("option").data(options)
                 .enter().append("option")
                 .attr("value", d => d.value)
@@ -455,6 +503,7 @@ function addChannelControls(tdSelection) {
 
             // Channel-specific hover highlighting
             pill.on("mouseenter", function() {
+                if (!isAvail) return;
                 hl(p, c => {
                     if (ch.key === "L") {
                         return c.channel === "L" || c.chIdx === 0 || (c.id && (c.id.indexOf(" (L") !== -1 || c.id.indexOf("- - L") !== -1));
@@ -469,12 +518,12 @@ function addChannelControls(tdSelection) {
             });
         });
 
-        // Imbalance badge
-        container.append("span")
-            .attr("class", "imbalance-badge")
-            .attr("title", "Channel imbalance detected")
-            .text("⚠️")
-            .style("display", hasImbalance(p) ? "inline-flex" : "none");
+        // Imbalance badge disabled for MIRE (see hasImbalance note in graphtool.js & README)
+        // container.append("span")
+        //     .attr("class", "imbalance-badge")
+        //     .attr("title", "Channel imbalance detected")
+        //     .text("⚠️")
+        //     .style("display", hasImbalance(p) ? "inline-flex" : "none");
 
         // Headphone offset pill (Option A: sits next to L+R pill inside channel-pills-group)
         let offsetPill = container.append("div")
@@ -498,6 +547,7 @@ function renderPillsState(p, td) {
     if (!p || p.isTarget || !td || td.empty()) return;
     if (!p.channelState) setCurves(p);
     let state = p.channelState;
+    let availInfo = getAvailableChannelInfo(p);
 
     td.select(".offset-pill input").property("value", p.offset || 0);
 
@@ -507,19 +557,41 @@ function renderPillsState(p, td) {
         let chState = state[chKey];
         if (!chState) return;
 
-        pill.attr("data-visible", chState.visible ? "true" : "false");
-        pill.select(".pill-eye-icon").html(chState.visible ? EYE_OPEN_SVG : EYE_CLOSED_SVG);
+        let isAvail = isChannelAvailable(p, chKey);
+        let isVisible = isAvail && !!chState.visible;
+
+        pill.attr("data-available", isAvail ? "true" : "false");
+        pill.attr("data-visible", isVisible ? "true" : "false");
+        pill.select(".pill-eye").property("disabled", !isAvail);
+        pill.select(".pill-label").property("disabled", !isAvail);
+        pill.select(".pill-native-select").property("disabled", !isAvail);
+        pill.select(".pill-eye-icon").html(isVisible ? EYE_OPEN_SVG : EYE_CLOSED_SVG);
 
         let st = chState.seating || "avg";
         let labelPrefix = (chKey === "L" ? "Left: " : chKey === "R" ? "Right: " : "L + R: ");
-        let labelSuffix = (st === "avg") ? "AVG" : (st === "all") ? "ALL" : (chKey === "L" ? ("L" + st) : chKey === "R" ? ("R" + st) : ("S" + st));
+        let labelSuffix;
+        if (!isAvail) {
+            labelSuffix = "—";
+        } else if (chKey === "L" && availInfo.left.length === 1) {
+            labelSuffix = availInfo.left[0].label || ("L" + availInfo.left[0].seatNum);
+            st = String(availInfo.left[0].seatNum);
+        } else if (chKey === "R" && availInfo.right.length === 1) {
+            labelSuffix = availInfo.right[0].label || ("R" + availInfo.right[0].seatNum);
+            st = String(availInfo.right[0].seatNum);
+        } else if (chKey === "LR" && availInfo.left.length === 1 && availInfo.right.length === 1 && availInfo.left[0].seatNum === availInfo.right[0].seatNum) {
+            labelSuffix = "S" + availInfo.left[0].seatNum;
+            st = String(availInfo.left[0].seatNum);
+        } else {
+            labelSuffix = (st === "avg") ? "AVG" : (st === "all") ? "ALL" : (chKey === "L" ? ("L" + st) : chKey === "R" ? ("R" + st) : ("S" + st));
+        }
         pill.select(".pill-label-text").text(labelPrefix + labelSuffix);
 
-        pill.select(".pill-native-select").property("value", st);
+        pill.select(".pill-native-select").property("value", isAvail ? st : "");
     });
 
-    td.select(".imbalance-badge")
-        .style("display", hasImbalance(p) ? "inline-flex" : "none");
+    // Imbalance badge disabled for MIRE
+    // td.select(".imbalance-badge")
+    //     .style("display", hasImbalance(p) ? "inline-flex" : "none");
 }
 
 function updateChannelPills(p) {
@@ -608,6 +680,35 @@ function updateVariant(p) {
     let tr = table.selectAll("tr").filter(q=>q===p);
     tr.attr("data-filename", p.fileName);
     tr.select(".phonename").text(p.dispName);
+
+    // Sync sibling comparator(s) when swapping variants in place onto a single-channel mode
+    if (!p.isTarget && !p.isPrefBounds && !p.eqParent && typeof activePhones !== "undefined") {
+        let comparePhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent);
+        if (comparePhones.length >= 2) {
+            let pInfo = getAvailableChannelInfo(p);
+            if (pInfo.soloChannel) {
+                let targetLr = pInfo.soloChannel === "L" ? 0 : 1;
+                comparePhones.forEach(q => {
+                    if (q === p || q._userChannelOverride) return;
+                    let qInfo = getAvailableChannelInfo(q);
+                    if (qInfo.soloChannel !== null) return;
+                    let qSeat = "avg";
+                    if (pInfo.soloSeating != null && (q.copyOf || q) === (p.copyOf || p)) {
+                        let qSamples = pInfo.soloChannel === "L" ? qInfo.left : qInfo.right;
+                        if (qSamples.some(s => s.seatNum === pInfo.soloSeating)) {
+                            qSeat = String(pInfo.soloSeating);
+                        }
+                    }
+                    q._autoSynced = true;
+                    setCurves(q, false, targetLr, undefined, qSeat);
+                    if (q.eq && q.eq.active) {
+                        setCurves(q.eq, false, targetLr, undefined, qSeat);
+                    }
+                });
+            }
+        }
+    }
+
     let chTd = tr.select("td.channels");
     chTd.selectAll("*").remove();
     chTd.call(addChannelControls);
@@ -621,18 +722,31 @@ function changeVariant(p, update, trigger) {
     let fn = p.fileName,
         ch = p.vars[fn];
     function set(ch) {
+        let ap = (typeof activePhones !== "undefined")
+            ? activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent)
+            : [];
         let savedLr = p.lr;
         let savedAvg = p.avg;
         let savedSeating = p.seating;
-        if (savedLr === undefined && !savedAvg) {
-            let ap = (typeof activePhones !== 'undefined')
-                ? activePhones.filter(q => !q.isTarget && !q.isPrefBounds)
-                : [];
-            if (ap.length >= 2) {
-                savedLr = 1;
-            }
+
+        // When swapping variants in place on a single-phone view (and user hasn't manually overridden),
+        // reset single-side seating carryovers so switching e.g. (ANC 100) -> base restores L+R AVG cleanly.
+        if (update === updateVariant && ap.length <= 1 && !p._userChannelOverride) {
+            delete p.channelState;
+            savedLr = undefined;
+            savedAvg = (p.eq && p.eq.active) ? !p.eq.hasChannelSplits : false;
+            savedSeating = "avg";
+        } else if (savedLr === undefined && !savedAvg && ap.length >= 2) {
+            savedLr = 1;
         }
+
         p.rawChannels = ch; p.smooth = undefined;
+        let cached = parsedResultCache.get(fn);
+        if (cached) {
+            p.sampleLabels = cached.sampleLabels;
+            p.sampleSeatings = cached.sampleSeatings;
+            p.nonStandardSmoothing = cached.nonStandardSmoothing;
+        }
         smoothPhone(p);
         setCurves(p, savedAvg, savedLr, undefined, savedSeating);
         update(p, 0, 0, trigger);

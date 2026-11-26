@@ -36,6 +36,10 @@ function addExtra() {
     }
     if (!extraEQEnabled) {
         document.querySelector("div.extra-panel > div.extra-eq").style["display"] = "none";
+        const extraDemo = document.querySelector("div.extra-panel > div.extra-demo");
+        if (extraDemo) extraDemo.style["display"] = "none";
+        const extraMusicPlayer = document.querySelector("div.extra-panel > div.extra-music-player");
+        if (extraMusicPlayer) extraMusicPlayer.style["display"] = "none";
     }
 
     // Show and hide extra panel
@@ -136,9 +140,12 @@ function addExtra() {
 
     // Audio context & EQ demo state (hoisted early so fileAudio & filter callbacks can reference safely)
     let pinkNoiseAudio, pinkNoiseSource, scarletFireAudio, scarletFireSource,
-        uploadedAudio, uploadedSource, uploadedObjectURL, currentAudio, currentSource;
+        uploadedAudio, uploadedSource, uploadedObjectURL, currentAudio, currentSource,
+        demoAudio, demoSource;
     let toneGenActive = false;
     let isPlayingAudio = false;
+    let externalYieldCallback = null;
+    const volumeSubscribers = new Set();
 
     let audioContext = new (window.AudioContext || window.webkitAudioContext)();
     if (!audioContext) {
@@ -227,54 +234,85 @@ function addExtra() {
     let fileFiltersImport = document.querySelector("#file-filters-import");
     let disableFiltersBtn = document.querySelector("div.extra-eq button.disable-filters");
     let scopeButtons = document.querySelectorAll("div.extra-eq button.eq-scope-btn");
+    const openMusicPlayerBtn = document.getElementById("open-music-player");
+    if (openMusicPlayerBtn) {
+        openMusicPlayerBtn.addEventListener("click", () => {
+            if (window.matchMedia && window.matchMedia("(max-width: 1000px)").matches) {
+                if (typeof showGraphNotice === "function") {
+                    showGraphNotice("Music Player works on desktop only.");
+                }
+                return;
+            }
+            if (typeof window.toggleMusicPlayer === "function") {
+                window.toggleMusicPlayer();
+            }
+        });
+    }
+
+    let uploadInfoToggle = document.getElementById("upload-info-toggle");
+    let uploadInfoPopover = document.getElementById("upload-info-popover");
     let eqInfoToggle = document.getElementById("eq-info-toggle");
     let eqInfoPopover = document.getElementById("eq-info-popover");
     let filterEnabledInput, filterTypeSelect,
         filterFreqInput, filterQInput, filterGainInput;
     let isBypassed = false;
 
-    if (eqInfoToggle && eqInfoPopover) {
-        let eqInfoPinned = false;
-        let eqInfoCloseTimer = null;
-        const setEqInfoOpen = (open) => {
-            eqInfoPopover.classList.toggle("hidden", !open);
-            eqInfoToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    const infoPopoverControllers = [];
+    function bindInfoPopover(toggleEl, popoverEl) {
+        if (!toggleEl || !popoverEl) return;
+        let pinned = false;
+        let closeTimer = null;
+        const setOpen = (open) => {
+            if (open) {
+                infoPopoverControllers.forEach((ctrl) => {
+                    if (ctrl.toggle !== toggleEl) ctrl.close();
+                });
+            }
+            popoverEl.classList.toggle("hidden", !open);
+            toggleEl.setAttribute("aria-expanded", open ? "true" : "false");
         };
+        const close = () => {
+            clearTimeout(closeTimer);
+            pinned = false;
+            setOpen(false);
+        };
+        infoPopoverControllers.push({ toggle: toggleEl, close });
         const scheduleHoverClose = () => {
-            clearTimeout(eqInfoCloseTimer);
-            eqInfoCloseTimer = setTimeout(() => {
-                if (!eqInfoPinned) setEqInfoOpen(false);
+            clearTimeout(closeTimer);
+            closeTimer = setTimeout(() => {
+                if (!pinned) setOpen(false);
             }, 120);
         };
-        eqInfoToggle.addEventListener("mouseenter", () => {
-            clearTimeout(eqInfoCloseTimer);
-            setEqInfoOpen(true);
+        toggleEl.addEventListener("mouseenter", () => {
+            clearTimeout(closeTimer);
+            setOpen(true);
         });
-        eqInfoToggle.addEventListener("mouseleave", scheduleHoverClose);
-        eqInfoPopover.addEventListener("mouseenter", () => {
-            clearTimeout(eqInfoCloseTimer);
+        toggleEl.addEventListener("mouseleave", scheduleHoverClose);
+        popoverEl.addEventListener("mouseenter", () => {
+            clearTimeout(closeTimer);
         });
-        eqInfoPopover.addEventListener("mouseleave", scheduleHoverClose);
-        eqInfoToggle.addEventListener("click", (e) => {
+        popoverEl.addEventListener("mouseleave", scheduleHoverClose);
+        toggleEl.addEventListener("click", (e) => {
             e.stopPropagation();
-            clearTimeout(eqInfoCloseTimer);
-            eqInfoPinned = !eqInfoPinned;
-            setEqInfoOpen(eqInfoPinned);
+            clearTimeout(closeTimer);
+            pinned = !pinned;
+            setOpen(pinned);
         });
         document.addEventListener("click", (e) => {
-            if (eqInfoPopover.classList.contains("hidden")) return;
-            if (!eqInfoToggle.contains(e.target) && !eqInfoPopover.contains(e.target)) {
-                eqInfoPinned = false;
-                setEqInfoOpen(false);
+            if (popoverEl.classList.contains("hidden")) return;
+            if (!toggleEl.contains(e.target) && !popoverEl.contains(e.target)) {
+                close();
             }
         });
         document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape" && !eqInfoPopover.classList.contains("hidden")) {
-                eqInfoPinned = false;
-                setEqInfoOpen(false);
+            if (e.key === "Escape" && !popoverEl.classList.contains("hidden")) {
+                close();
             }
         });
     }
+
+    bindInfoPopover(uploadInfoToggle, uploadInfoPopover);
+    bindInfoPopover(eqInfoToggle, eqInfoPopover);
 
     const cloneDefaultFilters = () => DEFAULT_EQ_FILTERS.map(f => Object.assign({}, f));
     let eqScope = "LR"; // "LR" | "L" | "R"
@@ -297,6 +335,7 @@ function addExtra() {
 
     let eqOverlayEnabled = false;
     let eqOverlayUserDismissed = false;
+    let eqOverlayUserEnabled = false;
     let fftEnabled = true;
     let fftStyle = "bars"; // "bars" | "wave"
     let fftMode = "post";  // "post" | "pre"
@@ -309,6 +348,7 @@ function addExtra() {
         }
     }
 
+    const boundHoverRows = new WeakSet();
     let updateFilterRowInputs = () => {
         filterEnabledInput = filtersContainer.querySelectorAll("input[name='enabled']");
         filterTypeSelect = filtersContainer.querySelectorAll("select[name='type']");
@@ -321,6 +361,24 @@ function addExtra() {
             if (el.matches("select[name='type']")) {
                 el.removeEventListener("change", onFilterTypeChange);
                 el.addEventListener("change", onFilterTypeChange);
+            }
+        });
+        Array.from(filtersContainer.children).forEach((row, idx) => {
+            row.dataset.bandIdx = String(idx);
+            if (!boundHoverRows.has(row)) {
+                boundHoverRows.add(row);
+                row.addEventListener("mouseenter", () => {
+                    let bIdx = parseInt(row.dataset.bandIdx, 10);
+                    if (!isNaN(bIdx) && typeof onSidebarBandHover === "function") {
+                        onSidebarBandHover(bIdx);
+                    }
+                });
+                row.addEventListener("mouseleave", () => {
+                    let bIdx = parseInt(row.dataset.bandIdx, 10);
+                    if (!isNaN(bIdx) && typeof onSidebarBandLeave === "function") {
+                        onSidebarBandLeave(bIdx);
+                    }
+                });
             }
         });
     };
@@ -343,6 +401,7 @@ function addExtra() {
         let node = filtersContainer.querySelector("div.filter");
         while (filtersContainer.childElementCount < eqBands) {
             let clone = node.cloneNode(true);
+            clone.classList.remove("is-handle-active");
             clone.querySelector("input[name='enabled']").checked = true;
             clone.querySelector("select[name='type']").value = "PK";
             clone.querySelector("input[name='freq']").value = "1000";
@@ -465,6 +524,7 @@ function addExtra() {
         filtersToElem(scopeFilters[eqScope]);
         eqOverlayEnabled = false;
         eqOverlayUserDismissed = false;
+        eqOverlayUserEnabled = false;
         syncEqOverlayButton();
         setBypassState(false, false);
         updateScopeIndicators();
@@ -529,17 +589,490 @@ function addExtra() {
         let r = Math.round(Math.max(0, Math.min(255, rgb.r)));
         let g = Math.round(Math.max(0, Math.min(255, rgb.g)));
         let b = Math.round(Math.max(0, Math.min(255, rgb.b)));
+        let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
         let rootStyle = document.documentElement.style;
         rootStyle.setProperty("--eq-overlay-color", `rgb(${r}, ${g}, ${b})`);
         rootStyle.setProperty("--eq-overlay-fill", `rgba(${r}, ${g}, ${b}, 0.10)`);
         rootStyle.setProperty("--eq-overlay-ref", `rgba(${r}, ${g}, ${b}, 0.36)`);
+        rootStyle.setProperty("--eq-handle-text", lum > 150 ? "#111111" : "#ffffff");
     }
+
+    let hoveredBandIdx = null;
+    let activeDragIdx = null;
+    let wheelTipTimer = null;
+    let dragState = null;
+    let handleLayerEventsBound = false;
+    let cleanupActiveDrag = null;
+
+    function isGraphToolBlockingHandles() {
+        return (typeof interactInspect !== "undefined" && !!interactInspect) ||
+               (typeof interactCalc !== "undefined" && !!interactCalc);
+    }
+
+    function syncSidebarHandleHighlight(activeIdx) {
+        if (!filtersContainer) return;
+        Array.from(filtersContainer.children).forEach((row, idx) => {
+            row.classList.toggle("is-handle-active", activeIdx !== null && idx === activeIdx);
+        });
+    }
+
+    function formatEQGain(gain) {
+        let rounded = Math.round(gain * 10) / 10;
+        if (Math.abs(rounded) < 0.05) return "0.0";
+        return (rounded > 0 ? "+" : "") + rounded.toFixed(1);
+    }
+
+    function clientToSvgPoint(clientX, clientY) {
+        let svgNode = (typeof gr !== "undefined" && gr) ? gr.node() : null;
+        if (!svgNode) return null;
+        if (svgNode.createSVGPoint && svgNode.getScreenCTM) {
+            let ctm = svgNode.getScreenCTM();
+            if (ctm) {
+                let pt = svgNode.createSVGPoint();
+                pt.x = clientX;
+                pt.y = clientY;
+                let transformed = pt.matrixTransform(ctm.inverse());
+                return [transformed.x, transformed.y];
+            }
+        }
+        let rect = svgNode.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        return [
+            ((clientX - rect.left) / rect.width) * W0,
+            ((clientY - rect.top) / rect.height) * H0
+        ];
+    }
+
+    function getCurrentScopeHandleItems(center) {
+        let list = (filterEnabledInput && filterEnabledInput.length)
+            ? readDOMFilters(true)
+            : (scopeFilters[eqScope] || []);
+        let hasActiveBand = list.some(f => f && !f.disabled && f.type && f.freq >= 20 && f.freq <= 20000 && f.q > 0 && Math.abs(f.gain) >= 0.05);
+        let userStartedEQ = hasActiveBand || activeDragIdx !== null || eqOverlayUserEnabled || list.length > DEFAULT_EQ_FILTERS.length;
+        if (!userStartedEQ) return [];
+
+        let items = [];
+        for (let i = 0; i < list.length; i++) {
+            let f = list[i];
+            if (!f || f.disabled || !f.type || f.freq < 20 || f.freq > 20000 || f.q <= 0) continue;
+            let cx = Math.max(pad.l, Math.min(pad.l + W, x(f.freq)));
+            let cy = Math.max(pad.t, Math.min(pad.t + H, y(center + f.gain)));
+            items.push({
+                idx: i,
+                num: i + 1,
+                filter: f,
+                cx,
+                cy
+            });
+        }
+        return items;
+    }
+
+    function ensureHandleSubgroups() {
+        if (typeof eqHandlesLayer === "undefined" || !eqHandlesLayer || eqHandlesLayer.empty()) {
+            return { handlesGroup: null, tooltipGroup: null };
+        }
+        let handlesGroup = eqHandlesLayer.select("g.eq-handles-group");
+        if (handlesGroup.empty()) {
+            handlesGroup = eqHandlesLayer.append("g").attr("class", "eq-handles-group");
+        }
+        let tooltipGroup = eqHandlesLayer.select("g.eq-handle-tooltip-group");
+        if (tooltipGroup.empty()) {
+            tooltipGroup = eqHandlesLayer.append("g").attr("class", "eq-handle-tooltip-group");
+        }
+        return { handlesGroup, tooltipGroup };
+    }
+
+    function drawEQBandPreview(center, items) {
+        if (typeof eqOverlayLayer === "undefined" || !eqOverlayLayer || eqOverlayLayer.empty()) return;
+        let focusIdx = activeDragIdx !== null ? activeDragIdx : hoveredBandIdx;
+        let focusItem = focusIdx !== null ? items.find(it => it.idx === focusIdx) : null;
+        let previewPts = focusItem ? buildEQOverlayData([focusItem.filter]) : [];
+        let previewSel = eqOverlayLayer.selectAll("path.eq-band-preview")
+            .data(previewPts.length ? [previewPts] : []);
+        previewSel.exit().remove();
+        previewSel.enter()
+            .append("path")
+            .attr("class", "eq-band-preview")
+            .merge(previewSel)
+            .classed("is-bypassed", isBypassed)
+            .attr("d", d => {
+                let areaGen = d3.area()
+                    .x(p => x(p[0]))
+                    .y0(() => y(center))
+                    .y1(p => y(p[1]))
+                    .curve(d3.curveNatural);
+                return areaGen(d);
+            });
+    }
+
+    function drawEQHandleTooltip(items) {
+        let { tooltipGroup } = ensureHandleSubgroups();
+        if (!tooltipGroup || tooltipGroup.empty()) return;
+        let focusIdx = activeDragIdx !== null ? activeDragIdx : hoveredBandIdx;
+        let focusItem = focusIdx !== null ? items.find(it => it.idx === focusIdx) : null;
+
+        let tipSel = tooltipGroup.selectAll("g.eq-handle-tooltip")
+            .data(focusItem ? [focusItem] : []);
+        tipSel.exit().remove();
+        if (!focusItem) return;
+
+        let tipEnter = tipSel.enter()
+            .append("g")
+            .attr("class", "eq-handle-tooltip");
+        tipEnter.append("rect").attr("rx", 3).attr("ry", 3);
+        tipEnter.append("text");
+
+        let tipG = tipEnter.merge(tipSel);
+        let f = focusItem.filter;
+        let label = `${Math.round(f.freq)} Hz | ${formatEQGain(f.gain)} dB | Q ${Number(f.q).toFixed(2)}`;
+        let textEl = tipG.select("text").text(label);
+        let textNode = textEl.node();
+        let textW = textNode && textNode.getComputedTextLength ? textNode.getComputedTextLength() : label.length * 5.0;
+        let boxW = Math.ceil(textW + 10);
+        let boxH = 15;
+
+        let tx = focusItem.cx - boxW / 2;
+        tx = Math.max(pad.l + 4, Math.min(pad.l + W - boxW - 4, tx));
+        let ty = focusItem.cy - boxH - 9;
+        if (ty < pad.t + 4) {
+            ty = Math.min(pad.t + H - boxH - 4, focusItem.cy + 9);
+        }
+
+        tipG.attr("transform", `translate(${tx.toFixed(1)}, ${ty.toFixed(1)})`);
+        tipG.select("rect").attr("width", boxW).attr("height", boxH);
+        textEl.attr("x", 5).attr("y", boxH / 2);
+    }
+
+    function onSidebarBandHover(bandIdx) {
+        if (!eqOverlayEnabled || isGraphToolBlockingHandles() || dragState) return;
+        let items = getCurrentScopeHandleItems(getEffectiveCenter());
+        if (!items.some(it => it.idx === bandIdx)) return;
+        hoveredBandIdx = bandIdx;
+        drawEQHandles();
+    }
+
+    function onSidebarBandLeave(bandIdx) {
+        if (activeDragIdx !== null || dragState) return;
+        if (hoveredBandIdx === bandIdx) {
+            hoveredBandIdx = null;
+            drawEQHandles();
+        }
+    }
+
+    function applyHandleValues(bandIdx, nextFreq, nextGain, nextQ) {
+        if (!filterFreqInput || !filterGainInput || !filterQInput || bandIdx < 0 || bandIdx >= eqBands) return;
+        if (nextFreq !== null && nextFreq !== undefined) {
+            let clampedFreq = Math.max(20, Math.min(20000, Math.round(nextFreq)));
+            filterFreqInput[bandIdx].value = String(clampedFreq);
+        }
+        if (nextGain !== null && nextGain !== undefined) {
+            let roundedGain = Math.max(-40, Math.min(40, Math.round(nextGain * 10) / 10));
+            if (Math.abs(roundedGain) < 0.05) roundedGain = 0;
+            filterGainInput[bandIdx].value = roundedGain === 0 ? "0" : String(Number(roundedGain.toFixed(1)));
+        }
+        if (nextQ !== null && nextQ !== undefined) {
+            let clampedQ = Math.max(0.1, Math.min(10, Math.round(nextQ * 100) / 100));
+            filterQInput[bandIdx].value = String(Number(clampedQ.toFixed(2)));
+        }
+        applyEQ();
+    }
+
+    function getBandIdxFromEventTarget(target) {
+        if (!target || typeof target.closest !== "function") return -1;
+        let handleEl = target.closest("g.eq-band-handle");
+        if (!handleEl) return -1;
+        let idxAttr = parseInt(handleEl.getAttribute("data-band-idx"), 10);
+        if (!isNaN(idxAttr)) return idxAttr;
+        let datum = d3.select(handleEl).datum();
+        return (datum && typeof datum.idx === "number") ? datum.idx : -1;
+    }
+
+    function bindHandleLayerEvents() {
+        if (handleLayerEventsBound || typeof eqHandlesLayer === "undefined" || !eqHandlesLayer || eqHandlesLayer.empty()) return;
+        let layerNode = eqHandlesLayer.node();
+        if (!layerNode) return;
+        handleLayerEventsBound = true;
+
+        const finishActiveDrag = (ev, skipRedraw) => {
+            if (!dragState) return;
+            if (ev && ev.pointerId !== undefined && ev.pointerId !== dragState.pointerId) return;
+            let endedIdx = dragState.bandIdx;
+            let pid = dragState.pointerId;
+            dragState = null;
+            activeDragIdx = null;
+            window.removeEventListener("pointermove", onWindowPointerMove);
+            window.removeEventListener("pointerup", onWindowPointerUp);
+            window.removeEventListener("pointercancel", onWindowPointerCancel);
+            try {
+                if (layerNode.hasPointerCapture && layerNode.hasPointerCapture(pid)) {
+                    layerNode.releasePointerCapture(pid);
+                }
+            } catch (_) {}
+
+            if (!skipRedraw) {
+                let latest = readDOMFilters(true)[endedIdx];
+                if (!latest || Math.abs(latest.gain) < 0.05) {
+                    if (hoveredBandIdx === endedIdx) hoveredBandIdx = null;
+                } else if (ev && typeof ev.clientX === "number" && typeof ev.clientY === "number" && typeof document.elementFromPoint === "function") {
+                    let under = document.elementFromPoint(ev.clientX, ev.clientY);
+                    let overIdx = getBandIdxFromEventTarget(under);
+                    hoveredBandIdx = overIdx >= 0 ? overIdx : null;
+                }
+            }
+            flushPendingApplyEQ();
+            if (!skipRedraw) {
+                drawEQHandles();
+            }
+        };
+        cleanupActiveDrag = finishActiveDrag;
+
+        const onWindowPointerMove = (ev) => {
+            if (!dragState || ev.pointerId !== dragState.pointerId) return;
+            if (!eqOverlayEnabled || isGraphToolBlockingHandles()) {
+                finishActiveDrag(ev);
+                return;
+            }
+            let pt = clientToSvgPoint(ev.clientX, ev.clientY);
+            if (!pt) return;
+            let dx = pt[0] - dragState.prevSvgPt[0];
+            let dy = pt[1] - dragState.prevSvgPt[1];
+            dragState.prevSvgPt = pt;
+
+            let scaleFactor = ev.shiftKey ? 0.25 : 1.0;
+            dragState.curPx[0] = Math.max(pad.l, Math.min(pad.l + W, dragState.curPx[0] + dx * scaleFactor));
+            dragState.curPx[1] = Math.max(pad.t, Math.min(pad.t + H, dragState.curPx[1] + dy * scaleFactor));
+
+            let center = getEffectiveCenter();
+            let nextFreq = x.invert(dragState.curPx[0]);
+            let nextGain = y.invert(dragState.curPx[1]) - center;
+            applyHandleValues(dragState.bandIdx, nextFreq, nextGain, null);
+        };
+
+        const onWindowPointerUp = (ev) => finishActiveDrag(ev);
+        const onWindowPointerCancel = (ev) => finishActiveDrag(ev);
+
+        layerNode.addEventListener("pointerdown", (ev) => {
+            if (!eqOverlayEnabled || isGraphToolBlockingHandles()) return;
+            if (ev.pointerType === "mouse" && ev.button !== 0) return;
+            let bandIdx = getBandIdxFromEventTarget(ev.target);
+            if (bandIdx < 0 || bandIdx >= eqBands) return;
+            let f = readDOMFilters(true)[bandIdx];
+            if (!f || f.disabled) return;
+            let startPt = clientToSvgPoint(ev.clientX, ev.clientY);
+            if (!startPt) return;
+
+            ev.preventDefault();
+            ev.stopPropagation();
+            clearTimeout(wheelTipTimer);
+
+            if (dragState) finishActiveDrag();
+            let center = getEffectiveCenter();
+            dragState = {
+                pointerId: ev.pointerId,
+                bandIdx,
+                prevSvgPt: startPt,
+                curPx: [
+                    Math.max(pad.l, Math.min(pad.l + W, x(f.freq))),
+                    Math.max(pad.t, Math.min(pad.t + H, y(center + f.gain)))
+                ]
+            };
+            activeDragIdx = bandIdx;
+            hoveredBandIdx = bandIdx;
+
+            try {
+                if (layerNode.setPointerCapture) {
+                    layerNode.setPointerCapture(ev.pointerId);
+                }
+            } catch (_) {}
+
+            window.addEventListener("pointermove", onWindowPointerMove);
+            window.addEventListener("pointerup", onWindowPointerUp);
+            window.addEventListener("pointercancel", onWindowPointerCancel);
+            drawEQHandles();
+        });
+
+        layerNode.addEventListener("pointerover", (ev) => {
+            if (dragState || !eqOverlayEnabled || isGraphToolBlockingHandles()) return;
+            let bandIdx = getBandIdxFromEventTarget(ev.target);
+            if (bandIdx < 0 || hoveredBandIdx === bandIdx) return;
+            clearTimeout(wheelTipTimer);
+            hoveredBandIdx = bandIdx;
+            drawEQHandles();
+        });
+
+        layerNode.addEventListener("pointerout", (ev) => {
+            if (dragState) return;
+            let outIdx = getBandIdxFromEventTarget(ev.target);
+            if (outIdx < 0) return;
+            let nextIdx = getBandIdxFromEventTarget(ev.relatedTarget);
+            if (nextIdx === outIdx) return;
+            if (hoveredBandIdx === outIdx) {
+                hoveredBandIdx = nextIdx >= 0 ? nextIdx : null;
+                drawEQHandles();
+            }
+        });
+
+        layerNode.addEventListener("dblclick", (ev) => {
+            if (!eqOverlayEnabled || isGraphToolBlockingHandles()) return;
+            let bandIdx = getBandIdxFromEventTarget(ev.target);
+            if (bandIdx < 0 || bandIdx >= eqBands) return;
+            ev.stopPropagation();
+            ev.preventDefault();
+            clearTimeout(wheelTipTimer);
+            if (dragState) finishActiveDrag();
+            activeDragIdx = null;
+            hoveredBandIdx = null;
+            applyHandleValues(bandIdx, null, 0, null);
+        });
+
+        layerNode.addEventListener("wheel", (ev) => {
+            if (!eqOverlayEnabled || isGraphToolBlockingHandles()) return;
+            let bandIdx = getBandIdxFromEventTarget(ev.target);
+            if (bandIdx < 0 || bandIdx >= eqBands) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            let f = readDOMFilters(true)[bandIdx];
+            if (!f) return;
+            let curQ = parseFloat(f.q) || (f.type === "PK" ? 1.0 : 0.71);
+            let dir = ev.deltaY < 0 ? 1 : -1;
+            let stepFactor = ev.shiftKey ? 1.02 : 1.09;
+            let nextQ = dir > 0 ? curQ * stepFactor : curQ / stepFactor;
+            hoveredBandIdx = bandIdx;
+            clearTimeout(wheelTipTimer);
+            applyHandleValues(bandIdx, null, null, nextQ);
+        }, { passive: false });
+    }
+
+    function drawEQHandles() {
+        if (typeof eqHandlesLayer === "undefined" || !eqHandlesLayer || eqHandlesLayer.empty()) return;
+        bindHandleLayerEvents();
+        if (!eqOverlayEnabled) {
+            if (dragState && cleanupActiveDrag) cleanupActiveDrag(null, true);
+            eqHandlesLayer.selectAll("*").remove();
+            syncSidebarHandleHighlight(null);
+            return;
+        }
+        let { handlesGroup } = ensureHandleSubgroups();
+        if (!handlesGroup || handlesGroup.empty()) return;
+
+        let center = getEffectiveCenter();
+        let items = getCurrentScopeHandleItems(center);
+        let focusIdx = activeDragIdx !== null ? activeDragIdx : hoveredBandIdx;
+        if (focusIdx !== null && !items.some(it => it.idx === focusIdx)) {
+            if (activeDragIdx === focusIdx) activeDragIdx = null;
+            if (hoveredBandIdx === focusIdx) hoveredBandIdx = null;
+            focusIdx = null;
+        }
+
+        eqHandlesLayer
+            .classed("is-bypassed", isBypassed)
+            .classed("is-tool-blocked", isGraphToolBlockingHandles());
+
+        let handlesSel = handlesGroup.selectAll("g.eq-band-handle")
+            .data(items, d => d.idx);
+
+        handlesSel.exit().remove();
+
+        let enterG = handlesSel.enter()
+            .append("g")
+            .attr("class", "eq-band-handle");
+
+        enterG.append("circle")
+            .attr("class", "eq-handle-hit")
+            .attr("r", 12);
+        enterG.append("circle")
+            .attr("class", "eq-handle-dot")
+            .attr("r", 5.5);
+        enterG.append("text")
+            .attr("class", "eq-handle-num")
+            .attr("x", 0)
+            .attr("y", 0.2);
+
+        let merged = enterG.merge(handlesSel)
+            .attr("data-band-idx", d => String(d.idx))
+            .attr("transform", d => `translate(${d.cx.toFixed(2)}, ${d.cy.toFixed(2)})`)
+            .classed("is-active", d => d.idx === focusIdx)
+            .classed("is-dragging", d => d.idx === activeDragIdx);
+
+        merged.select("circle.eq-handle-dot")
+            .attr("r", d => d.idx === focusIdx ? 6.5 : 5.5);
+
+        merged.select("text.eq-handle-num")
+            .text(d => String(d.num));
+
+        syncSidebarHandleHighlight(focusIdx);
+        drawEQBandPreview(center, items);
+        drawEQHandleTooltip(items);
+    }
+
+    window.syncEQHandlesInteractivity = function () {
+        if (typeof eqHandlesLayer === "undefined" || !eqHandlesLayer || eqHandlesLayer.empty()) return;
+        let blocked = isGraphToolBlockingHandles();
+        if (blocked && (hoveredBandIdx !== null || activeDragIdx !== null || dragState)) {
+            if (dragState && cleanupActiveDrag) {
+                cleanupActiveDrag(null, true);
+            } else {
+                dragState = null;
+                activeDragIdx = null;
+            }
+            hoveredBandIdx = null;
+            drawEQHandles();
+        } else {
+            eqHandlesLayer.classed("is-tool-blocked", blocked);
+        }
+    };
+
+    window.onGraphDoubleClickEQ = function (pt) {
+        if (!eqOverlayEnabled || isGraphToolBlockingHandles() || !pt) return;
+        let center = getEffectiveCenter();
+        let nextFreq = Math.max(20, Math.min(20000, Math.round(x.invert(Math.max(pad.l, Math.min(pad.l + W, pt[0]))))));
+        let nextGain = Math.max(-40, Math.min(40, Math.round((y.invert(Math.max(pad.t, Math.min(pad.t + H, pt[1]))) - center) * 10) / 10));
+        if (Math.abs(nextGain) < 0.2) nextGain = 1.0;
+
+        saveCurrentScopeDOM();
+        let currentList = readDOMFilters(true);
+        let targetIdx = -1;
+        if (eqBands < extraEQBandsMax) {
+            eqBands = Math.min(eqBands + 1, extraEQBandsMax);
+            updateFilterElements();
+            targetIdx = eqBands - 1;
+            filterEnabledInput[targetIdx].checked = true;
+            filterTypeSelect[targetIdx].value = "PK";
+            filterQInput[targetIdx].value = "1";
+        } else {
+            targetIdx = currentList.findIndex(f => !f.disabled && Math.abs(f.gain) < 0.05);
+            if (targetIdx < 0) return;
+            filterTypeSelect[targetIdx].value = "PK";
+            filterQInput[targetIdx].value = "1";
+        }
+        hoveredBandIdx = targetIdx;
+        applyHandleValues(targetIdx, nextFreq, nextGain, 1);
+        clearTimeout(wheelTipTimer);
+        wheelTipTimer = setTimeout(() => {
+            if (activeDragIdx === null && hoveredBandIdx === targetIdx) {
+                hoveredBandIdx = null;
+                drawEQHandles();
+            }
+        }, 1200);
+    };
 
     function drawEQOverlay(durationMs) {
         syncEQOverlayColors();
         if (typeof eqOverlayLayer === "undefined" || !eqOverlayLayer || eqOverlayLayer.empty()) return;
         if (!eqOverlayEnabled) {
             eqOverlayLayer.selectAll("*").remove();
+            if (dragState && cleanupActiveDrag) {
+                cleanupActiveDrag(null, true);
+            } else {
+                dragState = null;
+                activeDragIdx = null;
+            }
+            hoveredBandIdx = null;
+            if (typeof eqHandlesLayer !== "undefined" && eqHandlesLayer && !eqHandlesLayer.empty()) {
+                eqHandlesLayer.selectAll("*").remove();
+            }
+            syncSidebarHandleHighlight(null);
             return;
         }
         let center = getEffectiveCenter();
@@ -593,6 +1126,8 @@ function addExtra() {
         } else {
             strokeSel.attr("d", d => line(d));
         }
+
+        drawEQHandles();
     }
 
     window.redrawEQOverlay = () => drawEQOverlay(0);
@@ -697,7 +1232,8 @@ function addExtra() {
     }
 
     let applyEQHandle = null;
-    let applyEQExec = () => {
+    let applyEQUseRaf = false;
+    let applyEQExec = (skipRedraw) => {
         saveCurrentScopeDOM();
         let phoneSelected = eqPhoneSelect.value;
         let anyActive = hasAnyActiveFilters(false);
@@ -721,6 +1257,7 @@ function addExtra() {
                 let prevSplits = !!eqCurve.hasChannelSplits;
                 eqCurve.rawChannels = channels;
                 eqCurve.sampleLabels = phoneObj.sampleLabels;
+                eqCurve.sampleSeatings = phoneObj.sampleSeatings;
                 eqCurve.hasChannelSplits = hasSplits;
                 eqCurve.smooth = null;
                 smoothPhone(eqCurve);
@@ -739,6 +1276,7 @@ function addExtra() {
                 phoneObj.eq = phoneObjEQ;
                 phoneObjEQ.eqParent = phoneObj;
                 phoneObjEQ.sampleLabels = phoneObj.sampleLabels;
+                phoneObjEQ.sampleSeatings = phoneObj.sampleSeatings;
                 phoneObjEQ.hasChannelSplits = hasSplits;
                 updatePreampDisplay();
                 showPhone(phoneObjEQ, false);
@@ -749,14 +1287,43 @@ function addExtra() {
         } else {
             updatePreampDisplay();
         }
-        drawEQOverlay(0);
+        if (!skipRedraw) {
+            drawEQOverlay(0);
+        } else {
+            syncEQOverlayColors();
+        }
     };
 
-    let applyEQ = () => {
-        clearTimeout(applyEQHandle);
-        applyEQHandle = setTimeout(applyEQExec, 1);
+    function flushPendingApplyEQ() {
+        if (applyEQHandle === null) return;
+        if (applyEQUseRaf && typeof cancelAnimationFrame === "function") {
+            cancelAnimationFrame(applyEQHandle);
+        } else {
+            clearTimeout(applyEQHandle);
+        }
+        applyEQHandle = null;
+        applyEQUseRaf = false;
+        applyEQExec(false);
+    }
 
-        saveCurrentScopeDOM();
+    let applyEQ = () => {
+        if (applyEQHandle === null) {
+            if (typeof requestAnimationFrame === "function") {
+                applyEQUseRaf = true;
+                applyEQHandle = requestAnimationFrame(() => {
+                    applyEQHandle = null;
+                    applyEQUseRaf = false;
+                    applyEQExec(true);
+                });
+            } else {
+                applyEQUseRaf = false;
+                applyEQHandle = setTimeout(() => {
+                    applyEQHandle = null;
+                    applyEQExec(true);
+                }, 16);
+            }
+        }
+
         updateScopeIndicators();
 
         let hasConfigured = hasAnyActiveFilters(true);
@@ -798,6 +1365,11 @@ function addExtra() {
         eqBands = Math.min(eqBands + 1, extraEQBandsMax);
         updateFilterElements();
         scopeFilters[eqScope] = readDOMFilters(true);
+        if (!eqOverlayEnabled && !eqOverlayUserDismissed) {
+            eqOverlayEnabled = true;
+            syncEqOverlayButton();
+        }
+        drawEQOverlay(0);
     });
 
     // Remove last filter in current scope
@@ -845,6 +1417,7 @@ function addExtra() {
         let phoneObjEQ = addOrUpdatePhone(phoneObj.brand, phoneEQ, channels);
         phoneObjEQ.eqParent = phoneObj;
         phoneObjEQ.sampleLabels = phoneObj.sampleLabels;
+        phoneObjEQ.sampleSeatings = phoneObj.sampleSeatings;
         phoneObjEQ.hasChannelSplits = hasChannelTrimFilters(true);
         showPhone(phoneObjEQ, false);
         savedCounter++;
@@ -1013,6 +1586,7 @@ function addExtra() {
         btnEqOverlay.addEventListener("click", () => {
             eqOverlayEnabled = !eqOverlayEnabled;
             eqOverlayUserDismissed = !eqOverlayEnabled;
+            eqOverlayUserEnabled = eqOverlayEnabled;
             syncEqOverlayButton();
             drawEQOverlay(0);
         });
@@ -1385,9 +1959,34 @@ function addExtra() {
     let toneGenSlider = document.querySelector("div.eq-demo[name='tone-gen-slider']");
     let toneGeneratorOsc = null;
 
-    // Master Volume UI (click-free ramping + syncs Option B shared headroom)
-    volumeIcon.addEventListener("click", () => {
-        let now = audioContext.currentTime;
+    function emitVolumeState() {
+        const muted = volumeIcon ? volumeIcon.classList.contains("muted") : false;
+        const vol = muted ? 0 : (parseFloat(volumeRange ? volumeRange.value : currentVolume) || 0);
+        const state = { volume: parseFloat(currentVolume) || 0, effectiveVolume: vol, muted };
+        volumeSubscribers.forEach((fn) => {
+            try { fn(state); } catch (_) {}
+        });
+    }
+
+    function setMasterVolume(val) {
+        const clamped = Math.max(0, Math.min(100, parseFloat(val) || 0));
+        if (volumeIcon && volumeIcon.classList.contains("muted") && clamped > 0) {
+            volumeIcon.classList.remove("muted");
+            volumeIcon.innerHTML = SVG_ICON.volume;
+        }
+        currentVolume = clamped;
+        if (volumeRange) volumeRange.value = clamped;
+        const now = audioContext.currentTime;
+        volumeNode.gain.cancelScheduledValues(now);
+        volumeNode.gain.setTargetAtTime(clamped / 100, now, 0.007);
+        syncAudioGainTargets(false);
+        updatePreampDisplay();
+        emitVolumeState();
+    }
+
+    function toggleMasterMute() {
+        if (!volumeIcon || !volumeRange) return;
+        const now = audioContext.currentTime;
         if (volumeIcon.classList.contains("muted")) {
             volumeIcon.classList.remove("muted");
             volumeIcon.innerHTML = SVG_ICON.volume;
@@ -1404,19 +2003,16 @@ function addExtra() {
         }
         syncAudioGainTargets(false);
         updatePreampDisplay();
+        emitVolumeState();
+    }
+
+    // Master Volume UI (click-free ramping + syncs Option B shared headroom)
+    volumeIcon.addEventListener("click", () => {
+        toggleMasterMute();
     });
 
     volumeRange.addEventListener("input", () => {
-        if (volumeIcon.classList.contains("muted") && parseFloat(volumeRange.value) > 0) {
-            volumeIcon.classList.remove("muted");
-            volumeIcon.innerHTML = SVG_ICON.volume;
-        }
-        currentVolume = volumeRange.value;
-        let now = audioContext.currentTime;
-        volumeNode.gain.cancelScheduledValues(now);
-        volumeNode.gain.setTargetAtTime((parseFloat(volumeRange.value) || 0) / 100, now, 0.007);
-        syncAudioGainTargets(false);
-        updatePreampDisplay();
+        setMasterVolume(volumeRange.value);
     });
 
     // Channel Balance (attenuates opposite channel cleanly, zero positive gain clipping)
@@ -1691,7 +2287,7 @@ function addExtra() {
         uploadedSource = audioContext.createMediaElementSource(uploadedAudio);
         attachAudioTrackListeners(uploadedAudio);
 
-        let eqTrack = document.querySelector("div.extra-eq .eq-track");
+        let eqTrack = document.querySelector("div.extra-panel .eq-track");
         if (eqTrack) {
             let customOpt = eqTrack.querySelector("option[value='custom-eq-track']");
             if (customOpt) {
@@ -1733,13 +2329,15 @@ function addExtra() {
         attachAudioTrackListeners(pinkNoiseAudio);
         attachAudioTrackListeners(scarletFireAudio);
 
-        currentAudio = pinkNoiseAudio;
-        currentSource = pinkNoiseSource;
+        demoAudio = pinkNoiseAudio;
+        demoSource = pinkNoiseSource;
+        currentAudio = demoAudio;
+        currentSource = demoSource;
 
         applyFilters(audioContext, currentSource);
 
         let playButton = document.getElementById("play-button");
-        let eqTrack = document.querySelector("div.extra-eq .eq-track");
+        let eqTrack = document.querySelector("div.extra-panel .eq-track");
         let songProgressSlider = document.querySelector("div.eq-demo input[name='demo-time']");
         let songTimeText = document.getElementById("songTime");
 
@@ -1749,14 +2347,70 @@ function addExtra() {
 
         if (songProgressSlider) {
             songProgressSlider.addEventListener("input", () => {
-                if (!toneGenActive && currentAudio && currentAudio.duration && isFinite(currentAudio.duration)) {
-                    currentAudio.currentTime = (songProgressSlider.value / 100) * currentAudio.duration;
+                if (!toneGenActive && demoAudio && currentAudio === demoAudio && demoAudio.duration && isFinite(demoAudio.duration)) {
+                    demoAudio.currentTime = (songProgressSlider.value / 100) * demoAudio.duration;
                 }
             });
         }
 
+        const resetDemoTransportUI = () => {
+            if (playButton) {
+                playButton.classList.remove("playing");
+                playButton.innerHTML = SVG_ICON.play;
+            }
+            if (songTimeText) songTimeText.innerText = "00:00:00";
+            if (songProgressSlider) songProgressSlider.value = 0;
+        };
+
+        const resolveDemoTrack = () => {
+            if (!eqTrack) return;
+            switch (eqTrack.value) {
+                default:
+                    toneGenActive = false;
+                    toneGenRange.classList.add("hidden");
+                    toneGenSlider.classList.add("hidden");
+                    demoAudio = pinkNoiseAudio;
+                    demoSource = pinkNoiseSource;
+                    break;
+                case "scarlet":
+                    toneGenActive = false;
+                    toneGenRange.classList.add("hidden");
+                    toneGenSlider.classList.add("hidden");
+                    demoAudio = scarletFireAudio;
+                    demoSource = scarletFireSource;
+                    break;
+                case "custom-eq-track":
+                    if (!uploadedAudio || !uploadedSource) {
+                        if (typeof showGraphNotice === "function") {
+                            showGraphNotice("Please upload an audio file first.");
+                        }
+                        eqTrack.value = "pink";
+                        toneGenActive = false;
+                        toneGenRange.classList.add("hidden");
+                        toneGenSlider.classList.add("hidden");
+                        demoAudio = pinkNoiseAudio;
+                        demoSource = pinkNoiseSource;
+                        break;
+                    }
+                    toneGenActive = false;
+                    toneGenRange.classList.add("hidden");
+                    toneGenSlider.classList.add("hidden");
+                    demoAudio = uploadedAudio;
+                    demoSource = uploadedSource;
+                    break;
+                case "tone":
+                    toneGenActive = true;
+                    toneGenRange.classList.remove("hidden");
+                    toneGenSlider.classList.remove("hidden");
+                    break;
+            }
+        };
+
         if (eqTrack) eqTrack.addEventListener("change", () => {
             syncEqTrackWidth(eqTrack);
+            if (typeof externalYieldCallback === "function") {
+                try { externalYieldCallback(); } catch (_) {}
+            }
             if (toneGenActive && toneGeneratorOsc) {
                 try { currentSource.stop(); } catch (_) {}
                 toneGeneratorOsc = null;
@@ -1767,53 +2421,13 @@ function addExtra() {
 
             isPlayingAudio = false;
             stopFftLoop(true);
+            resetDemoTransportUI();
 
-            playButton.classList.remove("playing");
-            playButton.innerHTML = SVG_ICON.play;
-            if (songTimeText) songTimeText.innerText = "00:00:00";
-            if (songProgressSlider) songProgressSlider.value = 0;
-
-            switch (eqTrack.value) {
-                default:
-                    toneGenActive = false;
-                    toneGenRange.classList.add("hidden");
-                    toneGenSlider.classList.add("hidden");
-                    currentAudio = pinkNoiseAudio;
-                    currentSource = pinkNoiseSource;
-                    break;
-                case "scarlet":
-                    toneGenActive = false;
-                    toneGenRange.classList.add("hidden");
-                    toneGenSlider.classList.add("hidden");
-                    currentAudio = scarletFireAudio;
-                    currentSource = scarletFireSource;
-                    break;
-                case "custom-eq-track":
-                    if (!uploadedAudio || !uploadedSource) {
-                        alert("Please upload an audio file first.");
-                        eqTrack.value = "pink";
-                        toneGenActive = false;
-                        toneGenRange.classList.add("hidden");
-                        toneGenSlider.classList.add("hidden");
-                        currentAudio = pinkNoiseAudio;
-                        currentSource = pinkNoiseSource;
-                        break;
-                    }
-                    toneGenActive = false;
-                    toneGenRange.classList.add("hidden");
-                    toneGenSlider.classList.add("hidden");
-                    currentAudio = uploadedAudio;
-                    currentSource = uploadedSource;
-                    break;
-                case "tone":
-                    toneGenActive = true;
-                    toneGenRange.classList.remove("hidden");
-                    toneGenSlider.classList.remove("hidden");
-                    break;
-            }
-
-            if (!toneGenActive && currentSource) {
-                updateAudioFilters();
+            resolveDemoTrack();
+            if (!toneGenActive) {
+                currentAudio = demoAudio;
+                currentSource = demoSource;
+                if (currentSource) updateAudioFilters();
             }
         });
 
@@ -1836,16 +2450,20 @@ function addExtra() {
                 if (toneGenActive && toneGeneratorOsc) {
                     try { currentSource.stop(); } catch (_) {}
                     toneGeneratorOsc = null;
-                } else if (currentAudio) {
-                    currentAudio.pause();
-                    currentAudio.currentTime = 0;
+                } else if (demoAudio) {
+                    demoAudio.pause();
+                    demoAudio.currentTime = 0;
                 }
                 isPlayingAudio = false;
                 stopFftLoop(true);
                 playButton.classList.remove("playing");
                 playButton.innerHTML = SVG_ICON.play;
             } else {
+                if (typeof externalYieldCallback === "function") {
+                    try { externalYieldCallback(); } catch (_) {}
+                }
                 audioContext.resume();
+                resolveDemoTrack();
                 if (toneGenActive) {
                     toneGeneratorOsc = audioContext.createOscillator();
                     toneGeneratorOsc.type = "sine";
@@ -1854,6 +2472,8 @@ function addExtra() {
                     updateAudioFilters();
                     currentSource.start();
                 } else {
+                    currentAudio = demoAudio;
+                    currentSource = demoSource;
                     updateAudioFilters();
                     currentAudio.play();
                 }
@@ -1863,6 +2483,61 @@ function addExtra() {
                 startFftLoop();
             }
         });
+
+        window.mireAudioBridge = {
+            getAudioContext: () => audioContext,
+            createMediaSource: (audioEl) => audioContext.createMediaElementSource(audioEl),
+            claimExternalAudio: (audioEl, sourceNode, onYield) => {
+                if (toneGenActive && toneGeneratorOsc) {
+                    try { toneGeneratorOsc.stop(); } catch (_) {}
+                    toneGeneratorOsc = null;
+                } else if (demoAudio && !demoAudio.paused) {
+                    demoAudio.pause();
+                    demoAudio.currentTime = 0;
+                }
+                if (playButton && playButton.classList.contains("playing")) {
+                    resetDemoTransportUI();
+                }
+                externalYieldCallback = typeof onYield === "function" ? onYield : null;
+                toneGenActive = false;
+                currentAudio = audioEl;
+                currentSource = sourceNode;
+                applyFilters(audioContext, sourceNode);
+            },
+            setExternalPlaying: (audioEl, playing) => {
+                if (currentAudio !== audioEl) return;
+                if (playing) {
+                    audioContext.resume();
+                    isPlayingAudio = true;
+                    startFftLoop();
+                } else {
+                    isPlayingAudio = false;
+                    stopFftLoop(true);
+                }
+            },
+            releaseExternalAudio: (audioEl) => {
+                if (currentAudio === audioEl) {
+                    isPlayingAudio = false;
+                    stopFftLoop(true);
+                    currentAudio = demoAudio;
+                    currentSource = demoSource;
+                    if (currentSource) applyFilters(audioContext, currentSource);
+                }
+                if (externalYieldCallback) externalYieldCallback = null;
+            },
+            getVolume: () => {
+                const muted = volumeIcon ? volumeIcon.classList.contains("muted") : false;
+                const vol = parseFloat(currentVolume) || 0;
+                return { volume: vol, effectiveVolume: muted ? 0 : vol, muted };
+            },
+            setVolume: (val) => setMasterVolume(val),
+            toggleMute: () => toggleMasterMute(),
+            subscribeVolume: (fn) => {
+                if (typeof fn !== "function") return () => {};
+                volumeSubscribers.add(fn);
+                return () => volumeSubscribers.delete(fn);
+            }
+        };
     }
 
     if (document.readyState === "loading") {
