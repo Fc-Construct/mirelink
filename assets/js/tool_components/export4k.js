@@ -339,11 +339,63 @@
             .then(canvas => {
                 return new Promise((resolve, reject) => {
                     canvas.toBlob(blob => {
+                        canvas.width = 0;
+                        canvas.height = 0;
                         if (!blob) return reject(new Error("Failed to generate 4K PNG blob"));
                         resolve(blob);
                     }, "image/png");
                 });
             });
+    }
+
+    function triggerBlobDownload(blob, filename) {
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement("a");
+        a.download = filename;
+        a.href = url;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    function flashScreenshotButton(btn) {
+        if (!btn) return;
+        btn.classList.add("clicked");
+        setTimeout(() => {
+            btn.classList.remove("clicked");
+        }, 600);
+    }
+
+    function shareOrDownloadScreenshot(blob, filename, screenshotBtn) {
+        let pngFile = (typeof File === "function")
+            ? new File([blob], filename, { type: "image/png" })
+            : null;
+
+        if (pngFile && navigator.share && (!navigator.canShare || navigator.canShare({ files: [pngFile] }))) {
+            return navigator.share({
+                files: [pngFile],
+                title: filename.replace(/\.png$/i, "")
+            }).then(() => {
+                flashScreenshotButton(screenshotBtn);
+            }).catch(shareErr => {
+                if (shareErr && shareErr.name === "AbortError") {
+                    return; // User dismissed the share sheet intentionally
+                }
+                triggerBlobDownload(blob, filename);
+                flashScreenshotButton(screenshotBtn);
+                if (typeof showGraphNotice === "function") {
+                    showGraphNotice("Screenshot downloaded.");
+                }
+            });
+        }
+
+        triggerBlobDownload(blob, filename);
+        flashScreenshotButton(screenshotBtn);
+        if (typeof showGraphNotice === "function") {
+            showGraphNotice("Screenshot downloaded (clipboard copy not supported on this browser).");
+        }
+        return Promise.resolve();
     }
 
     function saveGraph4K(ext) {
@@ -368,14 +420,7 @@
         }
 
         render4KBlob().then(blob => {
-            let url = URL.createObjectURL(blob);
-            let a = document.createElement("a");
-            a.download = filename;
-            a.href = url;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            triggerBlobDownload(blob, filename);
         }).catch(err => {
             console.error("Error saving 4K PNG:", err);
         });
@@ -387,23 +432,45 @@
 
     function copyGraphScreenshot4K() {
         let screenshotBtn = document.querySelector("button#screenshot-btn");
+        let filename = getExportFilename("png");
+        let blobPromise = render4KBlob();
 
-        render4KBlob().then(blob => {
-            if (navigator.clipboard && window.ClipboardItem) {
-                return navigator.clipboard.write([
-                    new ClipboardItem({ "image/png": blob })
+        let canUseClipboard = !!(
+            navigator.clipboard &&
+            typeof navigator.clipboard.write === "function" &&
+            typeof window.ClipboardItem === "function"
+        );
+
+        let writePromise;
+        if (canUseClipboard) {
+            // Invoke clipboard.write synchronously inside the user tap/click gesture
+            // by passing the Blob Promise directly into ClipboardItem (required on iOS Safari).
+            try {
+                writePromise = navigator.clipboard.write([
+                    new ClipboardItem({ "image/png": blobPromise })
                 ]);
+            } catch (syncErr) {
+                // Older browsers that do not accept a Promise in ClipboardItem
+                writePromise = blobPromise.then(blob =>
+                    navigator.clipboard.write([new ClipboardItem({ "image/png": blob })])
+                );
             }
-            throw new Error("Clipboard API not supported");
-        }).then(() => {
-            if (screenshotBtn) {
-                screenshotBtn.classList.add("clicked");
-                setTimeout(() => {
-                    screenshotBtn.classList.remove("clicked");
-                }, 600);
-            }
+        } else {
+            writePromise = Promise.reject(new Error("Clipboard API not supported"));
+        }
+
+        writePromise.then(() => {
+            flashScreenshotButton(screenshotBtn);
         }).catch(err => {
-            console.error("Error copying 4K screenshot to clipboard:", err);
+            console.warn("Clipboard screenshot copy unavailable, falling back to Share/Download:", err);
+            return blobPromise
+                .then(blob => shareOrDownloadScreenshot(blob, filename, screenshotBtn))
+                .catch(renderErr => {
+                    console.error("Error generating 4K screenshot:", renderErr);
+                    if (typeof showGraphNotice === "function") {
+                        showGraphNotice("Could not capture screenshot on this device.");
+                    }
+                });
         });
 
         if (typeof window.trackGraphExported === "function") {

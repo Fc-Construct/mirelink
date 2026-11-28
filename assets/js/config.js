@@ -173,6 +173,12 @@ const socialLinks = [
         name: "Instagram",
         url: "https://www.instagram.com/fc_construct/",
         hidden: false
+    },
+    {
+        id: "twitter",
+        name: "Twitter",
+        url: "https://x.com/Fc_Construct",
+        hidden: false
     }
 ];
 
@@ -186,7 +192,7 @@ const ecosystemTools = [
     },
     {
         id: "review-tool",
-        name: "Review Tool",
+        name: "Reviewer App",
         url: "https://soundcheck-review.vercel.app/",
         hidden: false
     },

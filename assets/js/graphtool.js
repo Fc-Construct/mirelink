@@ -304,9 +304,6 @@ doc.html(`
                 <span class="eqopts"><button class="save-filters">Save EQ</button></span>
               </div>
               <div class="eq-saved-section hidden" aria-label="Saved Custom EQ Presets">
-                <div class="eq-saved-header">
-                  <span>Saved Custom EQ</span>
-                </div>
                 <div class="eq-saved-list"></div>
               </div>
               <!-- AutoEQ UI disabled for MIRE workflow (preserved for future use)
@@ -1079,18 +1076,22 @@ function isPresetTilt10Params(p) {
            Math.abs(+cur.treble || 0) < 1e-6;
 }
 
-function syncCustomCounterFloor() {
-    let minNext = 1;
+function getNextCustomViewNumber() {
+    let used = new Set();
     savedCustomViews.forEach(cv => {
-        let m = String(cv.name || "").match(/^CUSTOM\s+(\d+)$/i);
+        let m = String(cv.name || "").trim().match(/^CUSTOM\s+(\d+)$/i);
         if (m) {
             let n = parseInt(m[1], 10);
-            if (Number.isFinite(n) && n >= minNext) minNext = n + 1;
+            if (Number.isFinite(n) && n >= 1) used.add(n);
         }
     });
-    if (customViewCounter < minNext) {
-        customViewCounter = minNext;
-    }
+    let n = 1;
+    while (used.has(n)) n++;
+    return n;
+}
+
+function syncCustomCounterFloor() {
+    customViewCounter = getNextCustomViewNumber();
 }
 
 function loadCustomViewsState() {
@@ -1397,7 +1398,6 @@ function renderTargetsUI() {
             ear: cur.ear,
             treble: cur.treble
         };
-        customViewCounter += 1;
         savedCustomViews.push(newCv);
         activeCustomViewId = newCv.id;
         saveCustomViewsState();
@@ -1957,8 +1957,9 @@ function setCurves(p, avg, lr, samp, seating) {
     if (!p.channelState) {
         let isSoloRight = (lr === 1);
         let isSoloLeft = (lr === 0);
-        let isBothAvg = (avg === true || p.avg === true);
-        let initSeat = p.seating || "avg";
+        let isBothLR = (lr === null);
+        let isBothAvg = !isSoloRight && !isSoloLeft && !isBothLR && (avg === true || (avg === undefined && lr === undefined && p.avg === true));
+        let initSeat = seating !== undefined ? seating : (samp !== undefined ? (samp ? "all" : "avg") : (p.seating || "avg"));
         p.channelState = {
             L: { visible: !isSoloRight && !isBothAvg, seating: initSeat },
             R: { visible: !isSoloLeft && !isBothAvg, seating: initSeat },
@@ -1985,10 +1986,12 @@ function setCurves(p, avg, lr, samp, seating) {
                 p.channelState.L.visible = false;
                 p.channelState.R.visible = false;
                 p.channelState.LR.visible = true;
-            } else if (!p.channelState.L.visible && !p.channelState.R.visible) {
-                p.channelState.L.visible = true;
-                p.channelState.R.visible = true;
+            } else {
                 p.channelState.LR.visible = false;
+                if (!p.channelState.L.visible && !p.channelState.R.visible) {
+                    p.channelState.L.visible = true;
+                    p.channelState.R.visible = true;
+                }
             }
         }
         if (seating !== undefined) {
@@ -2149,6 +2152,7 @@ function setCurves(p, avg, lr, samp, seating) {
 }
 function updateCurves() {
     setCurves.apply(null, arguments);
+    reNormalizeActivePhones();
     updatePaths();
 }
 
@@ -2165,20 +2169,24 @@ function updateYCenter() {
 }
 function setBaseline(b, no_transition) {
     baseline = b;
+    reNormalizeActivePhones();
     updateYCenter();
     if (no_transition) {
         if (typeof window.redrawEQOverlay === "function") { window.redrawEQOverlay(); }
         return;
     }
+    let getTr = o => o ? "translate(0,"+(y(o)-y(0))+")" : null;
     gpath.selectAll("path")
         .transition().duration(500).ease(d3.easeQuad)
+        .attr("transform", c => getTr(getOffset(c.p)))
         .attr("d", drawLine);
     if (typeof window.redrawEQOverlay === "function") { window.redrawEQOverlay(); }
     table.selectAll("tr").select(".button")
         .classed("selected", p => p===baseline.p || (p.basedOn && p.basedOn===baseline.p));
 }
 function getBaseline(p) {
-    let b = getAvg(p).map(d => d[1]+getOffset(p));
+    let baseCurve = (typeof getVisibleNormAvg === "function") ? getVisibleNormAvg(p) : getAvg(p);
+    let b = baseCurve.map(d => d[1]+getOffset(p));
     return { p:p, fn:l=>l.map((e,i)=>[e[0],e[1]-b[Math.min(i,b.length-1)]]) };
 }
 
@@ -2326,7 +2334,101 @@ let norm_sel = ( default_normalization.toLowerCase() === "db" ) ? 0:1,
     norm_fr = default_norm_hz,
     norm_phon = default_norm_db;
 
+function anchorTargetAtDefaultHz(t) {
+    let iAnchor = fr_to_ind(default_norm_hz);
+    let avg = l => 20 * Math.log10(d3.mean(l, d => Math.pow(10, d / 20)));
+    return 60 - avg(validChannels(t).map(l => l[iAnchor][1]));
+}
+
+function getVisibleNormCurves(p) {
+    if (p && !p.isTarget && !p.isPrefBounds && p.activeCurves && p.activeCurves.length) {
+        let validActive = p.activeCurves.filter(c => c && c.l && c.l.length);
+        if (validActive.length) {
+            let avgActive = validActive.filter(c => c.channel === "AVG" || (c.id && c.id.indexOf("AVG") !== -1));
+            if (avgActive.length) {
+                return avgActive.map(c => c.l);
+            }
+            return validActive.map(c => c.l);
+        }
+    }
+    return validChannels(p);
+}
+
+function getVisibleNormAvg(p) {
+    let curves = getVisibleNormCurves(p);
+    return curves.length === 1 ? curves[0] : avgCurves(curves);
+}
+
+function getMatchingBaseNormCurves(snap, baseRef) {
+    if (!baseRef.channels && baseRef.rawChannels) {
+        smoothPhone(baseRef);
+    }
+    if (baseRef.channels) {
+        let visActive = (snap && snap.activeCurves) ? snap.activeCurves.filter(c => c && c.l && c.l.length) : [];
+        let hasAvg = visActive.some(c => c.channel === "AVG" || (c.id && c.id.indexOf("AVG") !== -1));
+        if (!hasAvg && visActive.length) {
+            let hasL = visActive.some(c => c.channel === "L" || c.chIdx === 0);
+            let hasR = visActive.some(c => c.channel === "R" || c.chIdx === 1);
+            let avail = getAvailableChannelInfo(baseRef);
+            if (hasR && !hasL && avail.right.length) {
+                return avail.right.map(s => s.curve);
+            }
+            if (hasL && !hasR && avail.left.length) {
+                return avail.left.map(s => s.curve);
+            }
+        }
+        let allBase = validChannels(baseRef);
+        if (allBase.length) return allBase;
+    }
+    return snap.eqBaseRawChannels ? snap.eqBaseRawChannels.filter(c => c !== null) : [];
+}
+
+function getActiveRefTarget() {
+    if (typeof activePhones !== "undefined") {
+        let activeTarget = activePhones.find(q => q && q.active && q.isTarget);
+        if (activeTarget) return activeTarget;
+    }
+    if (typeof baseline !== "undefined" && baseline && baseline.p && baseline.p.isTarget) {
+        return baseline.p;
+    }
+    return null;
+}
+
+function getHzNormAnchorLevel(freqIdx) {
+    // Keep Reference View locked at (500 Hz, 0 dB) and align all plotted headphones so every
+    // headphone and the active Reference View intersect at the exact same point at norm_fr.
+    let refTarget = getActiveRefTarget();
+    if (refTarget) {
+        let tChans = validChannels(refTarget);
+        if (tChans && tChans.length && tChans[0] && tChans[0][freqIdx]) {
+            if (refTarget.norm === undefined) {
+                refTarget.norm = anchorTargetAtDefaultHz(refTarget);
+            }
+            let refCurve = tChans.length === 1 ? tChans[0] : avgCurves(tChans);
+            return refCurve[freqIdx][1] + refTarget.norm;
+        }
+    }
+    return 60;
+}
+
+function getDbNormRefOffset() {
+    let refTarget = getActiveRefTarget();
+    if (refTarget && validChannels(refTarget).length) {
+        if (refTarget.norm === undefined) {
+            refTarget.norm = anchorTargetAtDefaultHz(refTarget);
+        }
+        return find_offset(getAvg(refTarget), default_norm_db) - refTarget.norm;
+    }
+    return 0;
+}
+
 function normalizePhone(p) {
+    // Lock Reference View targets and preference bounds at default_norm_hz (500 Hz)
+    // so changing Normalize (Hz or dB) never shifts the reference ruler—only its own OFFSET moves it.
+    if (p.isTarget || p.isPrefBounds) {
+        p.norm = anchorTargetAtDefaultHz(p);
+        return;
+    }
     if (p.isSandboxEQ) {
         let targetCenter = norm_sel ? 60 : norm_phon;
         p.norm = targetCenter - 60;
@@ -2337,34 +2439,54 @@ function normalizePhone(p) {
         return;
     }
     if (p.isEQSnapshot && p.eqBasePhone) {
-        let baseRef = p.eqBasePhone;
-        if (!baseRef.channels && baseRef.rawChannels) {
-            smoothPhone(baseRef);
-        }
-        let refChans = baseRef.channels ? baseRef.channels.filter(c => c !== null) : (p.eqBaseRawChannels ? p.eqBaseRawChannels.filter(c => c !== null) : null);
+        let refChans = getMatchingBaseNormCurves(p, p.eqBasePhone);
         if (refChans && refChans.length) {
             if (norm_sel) {
                 let i = fr_to_ind(norm_fr);
                 let avg = l => 20*Math.log10(d3.mean(l, d=>Math.pow(10,d/20)));
-                p.norm = 60 - avg(refChans.map(l=>l[i][1]));
+                let targetLevel = getHzNormAnchorLevel(i);
+                p.norm = targetLevel - avg(refChans.map(l=>l[i][1]));
             } else {
                 let refAvg = refChans.length === 1 ? refChans[0] : avgCurves(refChans);
-                p.norm = find_offset(refAvg, norm_phon);
+                p.norm = find_offset(refAvg, norm_phon) - getDbNormRefOffset();
             }
             return;
         }
     }
+    let visCurves = getVisibleNormCurves(p);
+    if (!visCurves || !visCurves.length) return;
     if (norm_sel) { // fr
         let i = fr_to_ind(norm_fr);
         let avg = l => 20*Math.log10(d3.mean(l, d=>Math.pow(10,d/20)));
-        p.norm = 60 - avg(validChannels(p).map(l=>l[i][1]));
+        let targetLevel = getHzNormAnchorLevel(i);
+        p.norm = targetLevel - avg(visCurves.map(l=>l[i][1]));
     } else { // phon
-        p.norm = find_offset(getAvg(p), norm_phon);
+        let visAvg = visCurves.length === 1 ? visCurves[0] : avgCurves(visCurves);
+        p.norm = find_offset(visAvg, norm_phon) - getDbNormRefOffset();
     }
     if (p.eq) {
         p.eq.norm = p.norm; // copy parent's norm to child
     } else if (p.eqParent) {
         p.norm = p.eqParent.norm; // set child's norm from parent
+    }
+}
+
+function reNormalizeActivePhones() {
+    if (typeof activePhones === "undefined" || !activePhones.length) return;
+    // 1. Anchor targets/bounds at default_norm_hz (500 Hz) first
+    activePhones.forEach(q => {
+        if (q && (q.isTarget || q.isPrefBounds)) normalizePhone(q);
+    });
+    // 2. Normalize base headphones next so eqParent.norm is fresh before EQ children copy it
+    activePhones.forEach(q => {
+        if (q && !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot) normalizePhone(q);
+    });
+    // 3. Normalize EQ children & saved EQ snapshots last
+    activePhones.forEach(q => {
+        if (q && (q.eqParent || q.isEQSnapshot)) normalizePhone(q);
+    });
+    if (typeof baseline !== "undefined" && baseline && baseline.p) {
+        baseline = getBaseline(baseline.p);
     }
 }
 
@@ -2378,8 +2500,7 @@ function setNorm(_, i, change) {
     }
     norm_sel = i;
     norms.classed("selected",(_,i)=>i===norm_sel);
-    activePhones.forEach(normalizePhone);
-    if (baseline.p) { baseline = getBaseline(baseline.p); }
+    reNormalizeActivePhones();
     updateYCenter();
     
     if (!userConfigApplicationActive) {
@@ -2396,16 +2517,255 @@ norms.select("input")
     });
 norms.select("span").on("click", (_,i)=>setNorm(_,i,false));
 
-function showPhone(p, exclusive, suppressVariant, trigger) {
-    if (!trigger && !p.copyOf && p.fileNames && p.fileNames.length && p.fileName !== p.fileNames[0]) {
-        p.fileName = p.fileNames[0];
-        p.dispName = (p.dispNames && p.dispNames[0]) ? p.dispNames[0] : p.fileNames[0];
-        if (p.vars && p.vars[p.fileName]) {
-            p.rawChannels = p.vars[p.fileName];
+function isComparePhone(q) {
+    return !!(q && !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot);
+}
+
+function resetPhoneTransientState(p) {
+    if (!p) return;
+    p.active = false;
+    p.pin = false;
+    p.hide = false;
+    delete p._userChannelOverride;
+    delete p._autoSynced;
+    delete p.channelState;
+    p.avg = false;
+    p.lr = undefined;
+    p.seating = undefined;
+}
+
+function reconcileChannelDefaults() {
+    let comparePhones = activePhones.filter(isComparePhone);
+
+    if (comparePhones.length === 0) {
+        // Standalone sandbox EQ snapshots (no base headphone plotted)
+        activePhones.filter(q => q && q.active && q.isEQSnapshot && !q._userChannelOverride).forEach(eqSnap => {
+            let wantAvg = !eqSnap.hasChannelSplits;
+            if (wantAvg) {
+                setCurves(eqSnap, true, undefined, undefined, "avg");
+            } else {
+                setCurves(eqSnap, false, null, undefined, "avg");
+            }
+        });
+        reNormalizeActivePhones();
+        return;
+    }
+
+    if (comparePhones.length === 1) {
+        let p = comparePhones[0];
+        delete p._autoSynced;
+
+        let activeEQs = activePhones.filter(q => q && q.active && (
+            (p.eq && q === p.eq) || (q.isEQSnapshot && q.eqParent === p)
+        ));
+        let hasActiveEQ = activeEQs.length > 0;
+        let hasChannelSplits = activeEQs.some(q => q.hasChannelSplits);
+
+        if (!p._userChannelOverride) {
+            if (hasActiveEQ && !hasChannelSplits) {
+                setCurves(p, true, undefined, undefined, "avg");
+            } else {
+                // Explicitly restore L + R (clears solo R / solo L / LR-avg)
+                setCurves(p, false, null, undefined, "avg");
+            }
+        }
+
+        activeEQs.forEach(eqObj => {
+            if (eqObj._userChannelOverride) return;
+            if (!eqObj.hasChannelSplits) {
+                setCurves(eqObj, true, undefined, undefined, "avg");
+            } else {
+                setCurves(eqObj, false, null, undefined, "avg");
+            }
+        });
+        reNormalizeActivePhones();
+        return;
+    }
+
+    // 2+ comparison headphones active:
+    // Default to R (AVG), or match a single-channel measurement (e.g. solo L or solo R1)
+    let singlePhones = comparePhones.filter(q => getAvailableChannelInfo(q).soloChannel !== null);
+    let primarySingle = singlePhones.length ? singlePhones[0] : null;
+    let primaryInfo = primarySingle ? getAvailableChannelInfo(primarySingle) : null;
+    let targetCh = primaryInfo ? primaryInfo.soloChannel : "R";
+    let targetLr = targetCh === "L" ? 0 : 1;
+
+    comparePhones.forEach(q => {
+        if (q._userChannelOverride) return;
+        let qInfo = getAvailableChannelInfo(q);
+        if (qInfo.soloChannel !== null) {
+            setCurves(q);
+            return;
+        }
+        let qSeat = "avg";
+        if (primarySingle && primaryInfo.soloSeating != null && (q.copyOf || q) === (primarySingle.copyOf || primarySingle)) {
+            let qSamples = targetCh === "L" ? qInfo.left : qInfo.right;
+            if (qSamples.some(s => s.seatNum === primaryInfo.soloSeating)) {
+                qSeat = String(primaryInfo.soloSeating);
+            }
+        }
+        q._autoSynced = true;
+        setCurves(q, false, targetLr, undefined, qSeat);
+        if (q.eq && q.eq.active && !q.eq._userChannelOverride) {
+            setCurves(q.eq, false, targetLr, undefined, qSeat);
+        }
+    });
+
+    activePhones.filter(q => q && q.active && q.isEQSnapshot && !q._userChannelOverride).forEach(eqSnap => {
+        setCurves(eqSnap, false, targetLr, undefined, "avg");
+    });
+    reNormalizeActivePhones();
+}
+
+function finalizeRemovedPhones(removedList, options) {
+    let opts = options || {};
+    let removed = (removedList || []).filter(Boolean);
+    if (!removed.length) return;
+
+    let removedSet = new Set(removed);
+    let removedSnapshotIds = [];
+    let removedScratchEQ = false;
+    let affectedTreeBases = new Set();
+
+    removed.forEach(q => {
+        if (q.eqParent && q.eqParent.eq === q) {
+            q.eqParent.eq = null;
+            if (!q.isEQSnapshot) removedScratchEQ = true;
+        }
+        if (q.isEQSnapshot && q.eqSnapshotId) {
+            removedSnapshotIds.push(q.eqSnapshotId);
+        }
+        if (!q.isTarget && q.fileNames) {
+            affectedTreeBases.add(q.copyOf || q);
+        }
+        resetPhoneTransientState(q);
+    });
+
+    activePhones = activePhones.filter(q => q && q.active && !removedSet.has(q));
+
+    // Detach eqParent on any remaining EQ snapshots whose base headphone was removed
+    activePhones.forEach(q => {
+        if (q && q.isEQSnapshot && q.eqParent && removedSet.has(q.eqParent)) {
+            q.eqParent = null;
+        }
+    });
+
+    // Clean up base.objs and auto-close variant trees that have no remaining active members
+    affectedTreeBases.forEach(treeBase => {
+        if (treeBase.objs) {
+            treeBase.objs = treeBase.objs.filter(q => q && q.active);
+            if (treeBase.objs.length === 0) {
+                delete treeBase.objs;
+            }
+        }
+        let stillShown = activePhones.some(q => q === treeBase || q.copyOf === treeBase);
+        if (!stillShown) {
+            if (treeBase !== opts.keepTreeOpenFor) {
+                setVariantTreeOpen(treeBase, false);
+            } else if (treeBase.treeOpen) {
+                renderVariantTree(treeBase);
+            }
+        } else if (treeBase.treeOpen) {
+            renderVariantTree(treeBase);
+        }
+    });
+
+    if (baseline.p && !baseline.p.active && baseline.p != df) {
+        if (opts.noBaselineTransition) {
+            if (baseline.p.phone != customTiltName && !dfBaseline) setBaseline(baseline0, 1);
         } else {
-            p.rawChannels = undefined;
+            setBaseline(baseline0);
         }
     }
+
+    if (removedSnapshotIds.length && typeof window.onEQSnapshotRemoved === "function") {
+        removedSnapshotIds.forEach(id => window.onEQSnapshotRemoved(id));
+    }
+    if (opts.exclusive && removedScratchEQ && typeof window.onExclusiveEQCleared === "function") {
+        window.onExclusiveEQCleared();
+    }
+}
+
+function clearUnpinnedExcept(keepObj, options) {
+    let opts = options || {};
+    let isTargetMode = !!(keepObj && keepObj.isTarget);
+    let keep = q => q === keepObj || q.pin || q.isTarget !== isTargetMode || q.isPrefBounds;
+    let toRemove = activePhones.filter(q => !keep(q));
+    if (!toRemove.length) return false;
+
+    nextPN = null;
+    finalizeRemovedPhones(toRemove, {
+        exclusive: true,
+        noBaselineTransition: !!opts.noBaselineTransition,
+        keepTreeOpenFor: keepObj && !keepObj.isTarget && keepObj.fileNames ? (keepObj.copyOf || keepObj) : null
+    });
+
+    if (!opts.skipRender) {
+        reconcileChannelDefaults();
+        if (typeof window.resetGraphTools === "function") {
+            window.resetGraphTools();
+        }
+        updatePaths();
+        updatePhoneTable();
+        d3.selectAll("#phones .phone-item,.target").call(setPhoneTr);
+        if (keepObj && !keepObj.isTarget && keepObj.fileNames) {
+            let treeBase = keepObj.copyOf || keepObj;
+            if (treeBase.treeOpen) renderVariantTree(treeBase);
+        }
+        if (extraEnabled && extraEQEnabled) {
+            updateEQPhoneSelect();
+        }
+    }
+    return true;
+}
+
+function showPhone(p, exclusive, suppressVariant, trigger) {
+    // Handle parent multi-variant row clicks cleanly without corrupting active or pinned variants
+    if (!trigger && !p.copyOf && !p.isTarget && p.fileNames && p.fileNames.length > 1) {
+        let fn0 = p.fileNames[0];
+        let dn0 = (p.dispNames && p.dispNames[0]) ? p.dispNames[0] : fn0;
+        let existingFirst = activePhones.find(q => (q === p || q.copyOf === p) && q.fileName === fn0);
+        if (existingFirst) {
+            if (exclusive) {
+                clearUnpinnedExcept(existingFirst, { noBaselineTransition: true });
+            }
+            if (!suppressVariant) {
+                setVariantTreeOpen(p, true);
+            }
+            document.activeElement.blur();
+            return;
+        }
+        // If `p` itself is already plotted showing a different variant (from an earlier in-place swap)
+        if (activePhones.indexOf(p) !== -1 && p.fileName !== fn0) {
+            if (exclusive && !p.pin) {
+                if (!p.vars) p.vars = {};
+                p.vars[p.fileName] = p.rawChannels;
+                p._prevVariant = { fileName: p.fileName, dispName: p.dispName };
+                p.fileName = fn0;
+                p.dispName = dn0;
+                changeVariant(p, updateVariant, trigger, true);
+                if (!suppressVariant) setVariantTreeOpen(p, true);
+                document.activeElement.blur();
+                return;
+            }
+            // Pinned or non-exclusive: keep `p` untouched and open default variant as a copy
+            showVariant(p, { fileName: fn0, dispName: dn0 }, trigger, !!exclusive);
+            if (!suppressVariant) setVariantTreeOpen(p, true);
+            document.activeElement.blur();
+            return;
+        }
+        // `p` is not active: ensure `p` points to its default first variant
+        if (p.fileName !== fn0) {
+            p.fileName = fn0;
+            p.dispName = dn0;
+            p.rawChannels = (p.vars && p.vars[fn0]) ? p.vars[fn0] : undefined;
+        }
+    } else if (!trigger && !p.copyOf && p.fileNames && p.fileNames.length && p.fileName !== p.fileNames[0]) {
+        p.fileName = p.fileNames[0];
+        p.dispName = (p.dispNames && p.dispNames[0]) ? p.dispNames[0] : p.fileNames[0];
+        p.rawChannels = (p.vars && p.vars[p.fileName]) ? p.vars[p.fileName] : undefined;
+    }
+
     if (p.isTarget && activePhones.indexOf(p)!==-1) {
         removePhone(p);
         return;
@@ -2426,8 +2786,6 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
         }
     }
     let wasActiveBeforeShow = !!p.active;
-    let keep = !exclusive ? (q=>true)
-             : (q => q===p || q.copyOf===p || q.pin || q.isTarget!==p.isTarget || q.isPrefBounds);
     if (!p.rawChannels) {
         if (p.isLoading) {
             if (inFlightLoads.has(p.fileName)) {
@@ -2466,112 +2824,35 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
     smoothPhone(p);
     if (p.id === undefined) { p.id = getPhoneNumber(); }
     normalizePhone(p); p.offset=p.offset||0;
-    let isComparePhone = q => !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot;
+
     if (exclusive) {
-        activePhones.filter(q => !keep(q)).forEach(q => {
-            delete q._userChannelOverride;
-            delete q._autoSynced;
-        });
-        activePhones = activePhones.filter(q => q.active = keep(q));
-        if (baseline.p && !baseline.p.active) {
-            if (baseline.p.phone != customTiltName && !dfBaseline) setBaseline(baseline0,1);
-        }
-        let apRem = activePhones.filter(isComparePhone);
-        if (apRem.length === 1) {
-            if (apRem[0].eq && apRem[0].eq.active) {
-                let wantAvg = !apRem[0].eq.hasChannelSplits;
-                setCurves(apRem[0], wantAvg, undefined, undefined, apRem[0]._userChannelOverride ? undefined : "avg");
-                setCurves(apRem[0].eq, wantAvg, undefined, undefined, apRem[0]._userChannelOverride ? undefined : "avg");
-            } else {
-                setCurves(apRem[0], false, undefined, undefined, apRem[0]._userChannelOverride ? undefined : "avg");
-            }
-        }
+        clearUnpinnedExcept(p, { skipRender: true, noBaselineTransition: true });
     }
+
     if (activePhones.indexOf(p)===-1) {
-        let avg = false;
-        let eqDefaultAvg = undefined;
-        let newTargetLr = undefined;
-        let newTargetSeating = undefined;
         if (!p.isTarget) {
-            let ap = activePhones.filter(isComparePhone);
-            if (!p.eqParent && !p.isEQSnapshot) {
-                if (ap.length >= 1) {
-                    avg = true;
-                    // Determine smart channel & seating defaults when comparing with single-channel modes
-                    let pInfo = getAvailableChannelInfo(p);
-                    let singlePhones = [p].concat(ap).filter(q => getAvailableChannelInfo(q).soloChannel !== null);
-                    let primarySingle = pInfo.soloChannel ? p : (singlePhones.length ? singlePhones[0] : null);
-                    let primaryInfo = primarySingle ? getAvailableChannelInfo(primarySingle) : null;
-                    let targetCh = primaryInfo ? primaryInfo.soloChannel : "R";
-                    let targetLr = targetCh === "L" ? 0 : 1;
-
-                    // New phone gets matched channel + exact seating if comparing with a single-side sibling
-                    if (!pInfo.soloChannel) {
-                        newTargetLr = targetLr;
-                        if (primarySingle && primaryInfo.soloSeating != null && (p.copyOf || p) === (primarySingle.copyOf || primarySingle)) {
-                            let targetSamples = targetCh === "L" ? pInfo.left : pInfo.right;
-                            if (targetSamples.some(s => s.seatNum === primaryInfo.soloSeating)) {
-                                newTargetSeating = String(primaryInfo.soloSeating);
-                            } else {
-                                newTargetSeating = "avg";
-                            }
-                        } else {
-                            newTargetSeating = "avg";
-                        }
-                    }
-
-                    // Existing comparison phones auto-default to matching channel + seating (if sibling & available)
-                    ap.forEach(q => {
-                        if (q._userChannelOverride) return;
-                        let qInfo = getAvailableChannelInfo(q);
-                        if (qInfo.soloChannel !== null) return;
-                        let qSeat = "avg";
-                        if (primarySingle && primaryInfo.soloSeating != null && (q.copyOf || q) === (primarySingle.copyOf || primarySingle)) {
-                            let qSamples = targetCh === "L" ? qInfo.left : qInfo.right;
-                            if (qSamples.some(s => s.seatNum === primaryInfo.soloSeating)) {
-                                qSeat = String(primaryInfo.soloSeating);
-                            }
-                        } else if (ap.length > 1 && q.channelState) {
-                            // Keep already-synced seating when adding 3rd+ curve if same channel
-                            let curVisibleCh = q.channelState.L.visible ? "L" : (q.channelState.R.visible ? "R" : null);
-                            if (curVisibleCh === targetCh && q.seating && q.seating !== "avg") {
-                                qSeat = q.seating;
-                            }
-                        }
-                        if (ap.length === 1 || primarySingle === p) {
-                            q._autoSynced = true;
-                            setCurves(q, false, targetLr, undefined, qSeat);
-                            if (q.eq && q.eq.active) {
-                                setCurves(q.eq, false, targetLr, undefined, qSeat);
-                            }
-                        }
-                    });
-                }
-                activePhones.push(p);
-                if (!p.isPrefBounds && typeof window.resetGraphTools === "function") {
-                    window.resetGraphTools();
-                }
-            } else {
-                // Attached EQ / Saved EQ layer follows single-model AVG default (or L+R when split trims exist),
-                // while yielding cleanly to R-solo when 2+ comparison headphones are plotted.
-                activePhones.push(p);
-                if (ap.length >= 2) {
-                    avg = true;
-                } else {
-                    eqDefaultAvg = !p.hasChannelSplits;
-                    if (p.eqParent && p.eqParent.active && p.eqParent.eq === p) {
-                        setCurves(p.eqParent, eqDefaultAvg, undefined);
-                    }
-                }
+            activePhones.push(p);
+            if (!p.isPrefBounds && !p.eqParent && !p.isEQSnapshot && typeof window.resetGraphTools === "function") {
+                window.resetGraphTools();
             }
         } else {
             activePhones.unshift(p);
         }
         p.active = true;
-        let finalLr = newTargetLr !== undefined ? newTargetLr : (avg ? 1 : undefined);
-        if (newTargetSeating !== undefined) p._autoSynced = true;
-        setCurves(p, eqDefaultAvg !== undefined ? eqDefaultAvg : false, finalLr, undefined, newTargetSeating);
+        if (p.isTarget || p.isPrefBounds) {
+            setCurves(p, false);
+        } else {
+            // Initialize base curves before centralized channel reconciliation
+            setCurves(p);
+        }
     }
+
+    if (!p.isTarget) {
+        reconcileChannelDefaults();
+    } else {
+        reNormalizeActivePhones();
+    }
+
     if (p.isTarget && tiltableTargets.includes(p.dispName) && p.phone !== "Custom Tilt") { // Tilt the target
         if (p.dispName === "Fc-Construct DF-HRTF") {
             customTiltName = p.dispName;
@@ -2604,9 +2885,14 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
     updatePhoneTable();
     d3.selectAll("#phones .phone-item,.target")
         .call(setPhoneTr);
-    //Displays variant pop-up when phone displayed
-    if (!suppressVariant && !trigger && p.fileNames && !p.isTarget) {
-        setVariantTreeOpen(p.copyOf || p, true);
+    // Display/refresh variant tree when phone is shown
+    if (!p.isTarget && p.fileNames) {
+        let treeBase = p.copyOf || p;
+        if (!suppressVariant && !trigger) {
+            setVariantTreeOpen(treeBase, true);
+        } else if (treeBase.treeOpen) {
+            renderVariantTree(treeBase);
+        }
     }
     document.activeElement.blur();
     if (extraEnabled && extraEQEnabled) {
@@ -2634,92 +2920,58 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
 
 window.syncEQPairChannels = function(basePhone, hasChannelSplits) {
     if (!basePhone || !basePhone.eq || !basePhone.eq.active) return;
-    let eqPhone = basePhone.eq;
-    eqPhone.hasChannelSplits = !!hasChannelSplits;
-    let comparePhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot);
-    if (comparePhones.length >= 2) {
-        // Respect MIRE multi-headphone R-solo comparison workflow
-        return;
-    }
-    let wantAvg = !hasChannelSplits;
-    if (basePhone.active) {
-        setCurves(basePhone, wantAvg, undefined);
-    }
-    setCurves(eqPhone, wantAvg, undefined);
+    basePhone.eq.hasChannelSplits = !!hasChannelSplits;
+    reconcileChannelDefaults();
     updatePaths();
 };
 
 function removeCopies(p) {
-    if (p.objs) {
-        p.objs.forEach(q=>q.active=false);
-        delete p.objs;
+    if (!p) return;
+    let members = activePhones.filter(q => q === p || q.copyOf === p || (p.objs && p.objs.includes(q)));
+    if (members.length === 0) {
+        if (p.objs) delete p.objs;
+        if (p.fileNames && p.treeOpen) setVariantTreeOpen(p, false);
+        d3.selectAll("#phones .phone-item,.target").call(setPhoneTr);
+        return;
     }
-    removePhone(p);
+    nextPN = null;
+    finalizeRemovedPhones(members, { exclusive: false });
+    if (p.objs) delete p.objs;
+    reconcileChannelDefaults();
+    if (typeof window.resetGraphTools === "function") {
+        window.resetGraphTools();
+    }
+    updatePaths();
+    updatePhoneTable();
+    d3.selectAll("#phones .phone-item,.target").call(setPhoneTr);
+    if (extraEnabled && extraEQEnabled) {
+        updateEQPhoneSelect();
+    }
 }
 
 function removePhone(p) {
-    if (p.eqParent && p.eqParent.eq === p) {
-        p.eqParent.eq = null;
-    }
-    p.active = p.pin = false; nextPN = null;
-    delete p._userChannelOverride;
-    delete p._autoSynced;
-    activePhones = activePhones.filter(q => q.active);
-    if (!p.isEQSnapshot) {
-        activePhones.forEach(q => {
-            if (q && q.isEQSnapshot && q.eqParent === p) {
-                q.eqParent = null;
-            }
-        });
-    }
+    if (!p) return;
+    let wasCompare = isComparePhone(p);
+    nextPN = null;
+    finalizeRemovedPhones([p], { exclusive: false });
     if (!p.isTarget) {
-        let ap = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot);
-        if (ap.length === 1) {
-            let restoreSeat = ap[0]._userChannelOverride ? undefined : "avg";
-            delete ap[0]._autoSynced;
-            if (ap[0].eq && ap[0].eq.active) {
-                let wantAvg = !ap[0].eq.hasChannelSplits;
-                setCurves(ap[0], wantAvg, undefined, undefined, restoreSeat);
-                setCurves(ap[0].eq, wantAvg, undefined, undefined, restoreSeat);
-            } else {
-                setCurves(ap[0], false, undefined, undefined, restoreSeat);
-            }
-        }
-        if (!p.isPrefBounds && !p.eqParent && !p.isEQSnapshot && typeof window.resetGraphTools === "function") {
+        reconcileChannelDefaults();
+        if (wasCompare && typeof window.resetGraphTools === "function") {
             window.resetGraphTools();
         }
     }
     updatePaths();
-    if (baseline.p && !baseline.p.active && baseline.p != df) { setBaseline(baseline0); }
     updatePhoneTable();
-    if (!p.isTarget && p.fileNames) {
-        let treeBase = p.copyOf || p;
-        if (treeBase.objs) {
-            treeBase.objs = treeBase.objs.filter(q => q.active);
-            if (treeBase.objs.length === 0) {
-                delete treeBase.objs;
-            }
-        }
-        let stillShown = activePhones.indexOf(treeBase) !== -1
-            || (treeBase.objs || []).some(q => q.active);
-        if (!stillShown) { setVariantTreeOpen(treeBase, false); }
-        else if (treeBase.treeOpen) { renderVariantTree(treeBase); }
-    }
     d3.selectAll("#phones .phone-item,.target")
         .call(setPhoneTr);
     if (extraEnabled && extraEQEnabled) {
         updateEQPhoneSelect();
     }
-    if (p.isEQSnapshot && p.eqSnapshotId && typeof window.onEQSnapshotRemoved === "function") {
-        window.onEQSnapshotRemoved(p.eqSnapshotId);
-    }
 }
 
 function variantsFor(p) {
     let base = p.copyOf || p;
-    let shown = (activePhones.indexOf(base) !== -1 ? [base] : [])
-        .concat(base.objs || [])
-        .filter(q => q.active);
+    let shown = activePhones.filter(q => q && q.active && (q === base || q.copyOf === base));
     return (p.fileNames || []).map((fileName, i) => {
         let dispName = (p.dispNames || [])[i] || fileName;
         return { fileName: fileName, dispName: dispName,
@@ -2738,13 +2990,45 @@ function renderVariantTree(p) {
     let enter = rows.enter().append("div")
         .attr("class", "variant-item")
         .attr("data-filename", d => d.fileName)
-        .on("click", function (d) { variantClickName(p, d); });
+        .on("mousedown", function () { d3.event.stopPropagation(); })
+        .on("click", function (d) { variantClickName(p, d); })
+        .on("auxclick", function (d) {
+            if (d3.event.button === 1) {
+                d3.event.stopPropagation();
+                if (!d.activeObj) variantClickAdd(p, d);
+            }
+        });
     rows = enter.merge(rows);
     rows.classed("variant-active", d => !!d.activeObj);
     rows.selectAll("span.variant-name").data(d => [d]).join("span")
         .attr("class", "variant-name").text(d => d.dispName);
+    rows.selectAll("button.variant-pin").data(d => d.activeObj ? [d] : []).join(
+        enterSel => enterSel.insert("button", "span.variant-add")
+            .attr("type", "button")
+            .attr("class", "variant-pin")
+            .on("mousedown", function () {
+                d3.event.stopPropagation();
+                d3.event.preventDefault();
+            })
+            .on("click", function (d) {
+                d3.event.stopPropagation();
+                if (d.activeObj && typeof window.togglePhonePin === "function") {
+                    window.togglePhonePin(d.activeObj);
+                }
+            }),
+        updateSel => updateSel,
+        exitSel => exitSel.remove()
+    )
+        .classed("pinned", d => !!(d.activeObj && d.activeObj.pin))
+        .attr("data-pinned", d => (d.activeObj && d.activeObj.pin) ? "true" : "false")
+        .attr("title", d => (d.activeObj && d.activeObj.pin) ? "Unpin variant" : "Pin variant");
     rows.selectAll("span.variant-add").data(d => [d]).join("span")
         .attr("class", "variant-add").text(d => d.activeObj ? "\u00D7" : "+")
+        .attr("title", d => d.activeObj ? "Remove variant" : "Add to comparison")
+        .on("mousedown", function () {
+            d3.event.stopPropagation();
+            d3.event.preventDefault();
+        })
         .on("click", function (d) {
             d3.event.stopPropagation();
             d.activeObj ? removePhone(d.activeObj) : variantClickAdd(p, d);
@@ -2763,25 +3047,36 @@ function setVariantTreeOpen(p, open) {
 
 function variantClickName(base, d) {
     d3.event.stopPropagation();
-    if (d.activeObj) return;
-    let shown = (activePhones.indexOf(base) !== -1 ? [base] : [])
-        .concat(base.objs || []).filter(q => q.active);
-    if (shown.length) {
-        let target = shown[0];
-        if (!target.vars) target.vars = base.vars || {};
-        target.vars[target.fileName] = target.rawChannels;
-        Object.assign(target, { fileName: d.fileName, dispName: d.dispName });
-        changeVariant(target, updateVariant, undefined);
+    let isAdditive = !!(d3.event && d3.event.ctrlKey);
+    if (isAdditive) {
+        if (!d.activeObj) variantClickAdd(base, d);
+        return;
+    }
+    // Exclusive selection (treats variants just like models from the user's perspective)
+    if (d.activeObj) {
+        clearUnpinnedExcept(d.activeObj);
+        renderVariantTree(base);
+        return;
+    }
+    let shown = activePhones.filter(q => q && q.active && (q === base || q.copyOf === base));
+    let unpinnedSameModel = shown.find(q => !q.pin);
+    if (unpinnedSameModel) {
+        if (!unpinnedSameModel.vars) unpinnedSameModel.vars = base.vars || {};
+        unpinnedSameModel.vars[unpinnedSameModel.fileName] = unpinnedSameModel.rawChannels;
+        unpinnedSameModel._prevVariant = { fileName: unpinnedSameModel.fileName, dispName: unpinnedSameModel.dispName };
+        Object.assign(unpinnedSameModel, { fileName: d.fileName, dispName: d.dispName });
+        changeVariant(unpinnedSameModel, updateVariant, undefined, true);
         renderVariantTree(base);
     } else {
-        showVariant(base, d, undefined);
+        showVariant(base, { fileName: d.fileName, dispName: d.dispName }, undefined, true);
         renderVariantTree(base);
     }
 }
 
 function variantClickAdd(base, d) {
     d3.event.stopPropagation();
-    showVariant(base, d, undefined);
+    if (d.activeObj) return;
+    showVariant(base, { fileName: d.fileName, dispName: d.dispName }, undefined, false);
     renderVariantTree(base);
 }
 
@@ -3009,7 +3304,8 @@ Promise.all([
         .call(setClicks(setBrand));
 
     let bg = (h) => function (p) {
-        (p.objs||[p]).forEach(q=>hl(q,h));
+        let members = activePhones.filter(q => q === p || q.copyOf === p);
+        (members.length ? members : [p]).forEach(q => hl(q, h));
     }
     window.updatePhoneSelect = () => {
         doc.select("#phones").selectAll("div.phone-item")
@@ -4203,6 +4499,8 @@ function getBrandSocialSvg(id) {
             return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.3 0 .58.04.85.13V9.01a6.33 6.33 0 0 0-.85-.06A6.34 6.34 0 0 0 3.15 15.3 6.34 6.34 0 0 0 9.49 21.64a6.34 6.34 0 0 0 6.34-6.34V8.73a8.2 8.2 0 0 0 4.78 1.52V6.81a4.85 4.85 0 0 1-1.02-.12Z"/></svg>`;
         case "instagram":
             return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.75 2h8.5A5.75 5.75 0 0 1 22 7.75v8.5A5.75 5.75 0 0 1 16.25 22h-8.5A5.75 5.75 0 0 1 2 16.25v-8.5A5.75 5.75 0 0 1 7.75 2Zm0 2A3.75 3.75 0 0 0 4 7.75v8.5A3.75 3.75 0 0 0 7.75 20h8.5A3.75 3.75 0 0 0 20 16.25v-8.5A3.75 3.75 0 0 0 16.25 4h-8.5ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm5.5-2.75a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Z"/></svg>`;
+        case "twitter":
+            return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M22.46 6c-.77.35-1.6.58-2.46.69.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98C8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.2-1.95-.5v.03c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.93.07 4.28 4.28 0 0 0 4 2.98 8.521 8.521 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79c0-.19 0-.37-.01-.56.84-.6 1.56-1.36 2.14-2.23Z"/></svg>`;
         default:
             return "";
     }

@@ -1035,26 +1035,16 @@ div.extra-panel div.filters-button > span[class="eqopts"] > button.remove-filter
 div.extra-panel div.eq-saved-section {
   width: 100%;
   margin: 6px 0 6px 0;
-  padding: 6px 8px;
+  padding: 0;
   box-sizing: border-box;
-  border: 1px solid var(--background-color-contrast-more);
-  border-radius: 6px;
-  background-color: var(--background-color);
+  border: none;
+  background: transparent;
   display: flex;
   flex-direction: column;
-  gap: 5px;
 }
 
-div.extra-panel div.eq-saved-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10.5px;
-  font-family: var(--font-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--font-color-inputs);
-  opacity: 0.85;
+div.extra-panel div.eq-saved-section.hidden {
+  display: none;
 }
 
 div.extra-panel div.eq-saved-list {
@@ -1190,11 +1180,6 @@ div.extra-panel button.eq-pill-btn {
 div.extra-panel button.eq-pill-btn:hover {
   opacity: 1;
   background-color: rgba(128, 128, 128, 0.18) !important;
-}
-
-div.extra-panel button.eq-pill-save.is-saved-flash {
-  opacity: 1;
-  color: #16a34a !important;
 }
 
 div.extra-panel button.eq-pill-delete {
@@ -1583,12 +1568,75 @@ div.scroll > div.phone-item {
     flex-wrap: wrap;
 }
 
+div.scroll > div.phone-item > span:first-child {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+div.scroll > div.phone-item:has(> svg.tree-chevron) > span:first-child {
+    padding-right: 26px;
+}
+
 div.scroll > div.phone-item:hover {
     text-decoration: none;
 }
 
 div.scroll > div.phone-item:hover > span {
     text-decoration: underline;
+}
+
+/* Sidebar pin button on active single-variant model rows */
+div.scroll > div.phone-item > button.phone-item-pin {
+    position: relative;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    margin: 0 2px 0 auto;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.14s ease, opacity 0.14s ease;
+}
+
+div.scroll > div.phone-item > button.phone-item-pin + div.phone-item-add {
+    margin-left: 0;
+}
+
+div.scroll > div.phone-item > button.phone-item-pin::before {
+    content: '';
+    display: block;
+    width: 14px;
+    height: 14px;
+    background-color: var(--card-highlight-text);
+    opacity: 0.42;
+    mask: var(--icon-pin) center / 14px no-repeat;
+    -webkit-mask: var(--icon-pin) center / 14px no-repeat;
+    transition: opacity 0.14s ease, background-color 0.14s ease;
+    pointer-events: none;
+}
+
+div.scroll > div.phone-item > button.phone-item-pin:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+div.scroll > div.phone-item > button.phone-item-pin:hover::before {
+    opacity: 0.85;
+}
+
+div.scroll > div.phone-item > button.phone-item-pin[data-pinned="true"],
+div.scroll > div.phone-item > button.phone-item-pin.pinned {
+    background-color: var(--card-highlight-text);
+}
+
+div.scroll > div.phone-item > button.phone-item-pin[data-pinned="true"]::before,
+div.scroll > div.phone-item > button.phone-item-pin.pinned::before {
+    background-color: #ffffff;
+    opacity: 1;
 }
 
 div.scroll > div.phone-item svg.tree-chevron {
@@ -1702,6 +1750,7 @@ div.scroll > div.phone-item[style*="border"] div.variant-tree div.variant-item s
 div.scroll > div.phone-item div.variant-tree div.variant-item {
     display: flex;
     align-items: center;
+    gap: 2px;
 
     min-height: 28px;
     margin-top: 2px;
@@ -1722,16 +1771,69 @@ div.scroll > div.phone-item[style*="border"] div.variant-tree div.variant-item.v
 
 div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-name {
     display: inline-block;
+    flex: 1 1 0;
+    min-width: 0;
     padding: 4px 0 4px 4px;
     color: #dddddd;
     cursor: pointer;
     font-weight: 400;
 }
 
+/* Sidebar pin button on active variant rows inside variant tree */
+div.scroll > div.phone-item div.variant-tree div.variant-item button.variant-pin {
+    position: relative;
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.14s ease, opacity 0.14s ease;
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item button.variant-pin::before {
+    content: '';
+    display: block;
+    width: 13px;
+    height: 13px;
+    background-color: var(--tree-active-text);
+    opacity: 0.45;
+    mask: var(--icon-pin) center / 13px no-repeat;
+    -webkit-mask: var(--icon-pin) center / 13px no-repeat;
+    transition: opacity 0.14s ease, background-color 0.14s ease;
+    pointer-events: none;
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item button.variant-pin:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item button.variant-pin:hover::before {
+    opacity: 0.9;
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item button.variant-pin[data-pinned="true"],
+div.scroll > div.phone-item div.variant-tree div.variant-item button.variant-pin.pinned {
+    background-color: var(--tree-active-text);
+}
+
+div.scroll > div.phone-item div.variant-tree div.variant-item button.variant-pin[data-pinned="true"]::before,
+div.scroll > div.phone-item div.variant-tree div.variant-item button.variant-pin.pinned::before {
+    background-color: #ffffff;
+    opacity: 1;
+}
+
 div.scroll > div.phone-item div.variant-tree div.variant-item span.variant-add {
     display: inline-block;
+    flex: 0 0 auto;
     padding: 2px 8px;
-    margin-left: auto;
+    margin-left: 0;
     font-size: 15px;
     line-height: 1.2;
     color: #bbbbbb;

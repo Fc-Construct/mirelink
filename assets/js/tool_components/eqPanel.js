@@ -8,10 +8,9 @@
 
 const SVG_ICON = {
     play:    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 22v-20l18 10-18 10z"/></svg>',
-    pause:   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M11 22h-4v-20h4v20zm6-20h-4v20h4v-20z"/></svg>',
+    pause:   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M11 22h-4v-20h4v20zm6-20h-4v20h4v20z"/></svg>',
     volume:  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M6 7l8-5v20l-8-5v-10zm-6 10h4v-10h-4v10zm20.264-13.264l-1.497 1.497c1.847 1.783 2.983 4.157 2.983 6.767 0 2.61-1.135 4.984-2.983 6.766l1.498 1.498c2.305-2.153 3.735-5.055 3.735-8.264s-1.43-6.11-3.736-8.264zm-.489 8.264c0-2.084-.915-3.967-2.384-5.391l-1.503 1.503c1.011 1.049 1.637 2.401 1.637 3.888 0 1.488-.623 2.841-1.634 3.891l1.503 1.503c1.468-1.424 2.381-3.309 2.381-5.394z"/></svg>',
-    muted:   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M19 7.358v15.642l-8-5v-.785l8-9.857zm3-6.094l-1.548-1.264-3.446 4.247-6.006 3.753v3.646l-2 2.464v-6.11h-4v10h.843l-3.843 4.736 1.548 1.264 18.452-22.736z"/></svg>',
-    save:    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>'
+    muted:   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M19 7.358v15.642l-8-5v-.785l8-9.857zm3-6.094l-1.548-1.264-3.446 4.247-6.006 3.753v3.646l-2 2.464v-6.11h-4v10h.843l-3.843 4.736 1.548 1.264 18.452-22.736z"/></svg>'
 };
 
 const DEFAULT_EQ_FILTERS = [
@@ -258,7 +257,6 @@ function addExtra() {
     let eqInfoPopover = document.getElementById("eq-info-popover");
     let filterEnabledInput, filterTypeSelect,
         filterFreqInput, filterQInput, filterGainInput;
-    let isBypassed = false;
 
     const infoPopoverControllers = [];
     function bindInfoPopover(toggleEl, popoverEl) {
@@ -317,14 +315,25 @@ function addExtra() {
     bindInfoPopover(uploadInfoToggle, uploadInfoPopover);
     bindInfoPopover(eqInfoToggle, eqInfoPopover);
 
-    const cloneDefaultFilters = () => DEFAULT_EQ_FILTERS.map(f => Object.assign({}, f));
-    let eqScope = "LR"; // "LR" | "L" | "R"
-    let scopeFilters = {
-        LR: cloneDefaultFilters(),
-        L: cloneDefaultFilters(),
-        R: cloneDefaultFilters()
+    const cloneDefaultFilters = () => DEFAULT_EQ_FILTERS.map((f, idx) => Object.assign({ baselineSlot: idx }, f));
+
+    // Canonical single-source-of-truth session state for the EQ editor & active preset
+    const eqSession = {
+        editingPresetId: null,
+        scope: "LR", // "LR" | "L" | "R"
+        scopes: {
+            LR: cloneDefaultFilters(),
+            L: cloneDefaultFilters(),
+            R: cloneDefaultFilters()
+        },
+        balance: 0,
+        bypassed: false,
+        pickedSandbox: false,
+        overlayEnabled: false,
+        overlayDismissed: false,
+        overlayUserEnabled: false
     };
-    let eqBands = scopeFilters[eqScope].length;
+    let eqBands = eqSession.scopes[eqSession.scope].length;
 
     // Overlay & FFT controls
     let btnEqOverlay = document.querySelector("div.extra-eq button.toggle-eq-overlay");
@@ -336,10 +345,6 @@ function addExtra() {
     let fftModeButtons = document.querySelectorAll("div.extra-eq button.fft-mode");
     let fftSpeedButtons = document.querySelectorAll("div.extra-eq button.fft-speed");
 
-    let eqOverlayEnabled = false;
-    let eqOverlayUserDismissed = false;
-    let eqOverlayUserEnabled = false;
-    let activeEditingPresetId = null;
     let fftEnabled = true;
     let fftStyle = "bars"; // "bars" | "wave"
     let fftMode = "post";  // "post" | "pre"
@@ -348,7 +353,7 @@ function addExtra() {
 
     function syncEqOverlayButton() {
         if (btnEqOverlay) {
-            btnEqOverlay.classList.toggle("selected", eqOverlayEnabled);
+            btnEqOverlay.classList.toggle("selected", eqSession.overlayEnabled);
         }
     }
 
@@ -406,6 +411,7 @@ function addExtra() {
         while (filtersContainer.childElementCount < eqBands) {
             let clone = node.cloneNode(true);
             clone.classList.remove("is-handle-active");
+            delete clone.dataset.baselineSlot;
             clone.querySelector("input[name='enabled']").checked = true;
             clone.querySelector("select[name='type']").value = "PK";
             clone.querySelector("input[name='freq']").value = "1000";
@@ -427,26 +433,30 @@ function addExtra() {
             let freq = parseFloat(filterFreqInput[i].value) || 0;
             let q = parseFloat(filterQInput[i].value) || 0;
             let gain = parseFloat(filterGainInput[i].value) || 0;
+            let rowEl = filtersContainer.children[i];
+            let rawSlot = rowEl ? rowEl.dataset.baselineSlot : "";
+            let parsedSlot = (rawSlot !== undefined && rawSlot !== "") ? parseInt(rawSlot, 10) : NaN;
+            let baselineSlot = (Number.isInteger(parsedSlot) && parsedSlot >= 0 && parsedSlot < DEFAULT_EQ_FILTERS.length) ? parsedSlot : null;
             if (!includeAll && (disabled || !type || !freq || !q || !gain)) {
                 continue;
             }
-            filters.push({ disabled, type, freq, q, gain });
+            filters.push({ disabled, type, freq, q, gain, baselineSlot });
         }
         return filters;
     };
 
     let saveCurrentScopeDOM = () => {
         if (!filterEnabledInput || !filterEnabledInput.length) return;
-        scopeFilters[eqScope] = readDOMFilters(true);
+        eqSession.scopes[eqSession.scope] = readDOMFilters(true);
     };
 
     let getScopeFilters = (scope, includeAll, ignoreBypass) => {
-        if (isBypassed && !includeAll && !ignoreBypass) {
+        if (eqSession.bypassed && !includeAll && !ignoreBypass) {
             return [];
         }
-        let list = (scope === eqScope && filterEnabledInput && filterEnabledInput.length)
+        let list = (scope === eqSession.scope && filterEnabledInput && filterEnabledInput.length)
             ? readDOMFilters(true)
-            : (scopeFilters[scope] || []);
+            : (eqSession.scopes[scope] || []);
         if (includeAll) {
             return list.map(f => Object.assign({}, f));
         }
@@ -463,15 +473,15 @@ function addExtra() {
     };
 
     let getActiveScopeDisplayFilters = (ignoreBypass) => {
-        if (eqScope === "L") return getTotalChannelFilters("L", ignoreBypass);
-        if (eqScope === "R") return getTotalChannelFilters("R", ignoreBypass);
+        if (eqSession.scope === "L") return getTotalChannelFilters("L", ignoreBypass);
+        if (eqSession.scope === "R") return getTotalChannelFilters("R", ignoreBypass);
         return getTotalChannelFilters("LR", ignoreBypass);
     };
 
     let elemToFilters = (includeAll, ignoreBypass) => {
         if (includeAll) {
             saveCurrentScopeDOM();
-            return (scopeFilters[eqScope] || []).map(f => Object.assign({}, f));
+            return (eqSession.scopes[eqSession.scope] || []).map(f => Object.assign({}, f));
         }
         return getActiveScopeDisplayFilters(ignoreBypass);
     };
@@ -490,8 +500,16 @@ function addExtra() {
             filterFreqInput[i].value = f.freq;
             filterQInput[i].value = f.q;
             filterGainInput[i].value = f.gain;
+            let rowEl = filtersContainer.children[i];
+            if (rowEl) {
+                if (typeof f.baselineSlot === "number" && f.baselineSlot >= 0 && f.baselineSlot < DEFAULT_EQ_FILTERS.length) {
+                    rowEl.dataset.baselineSlot = String(f.baselineSlot);
+                } else {
+                    delete rowEl.dataset.baselineSlot;
+                }
+            }
         });
-        scopeFilters[eqScope] = readDOMFilters(true);
+        eqSession.scopes[eqSession.scope] = readDOMFilters(true);
     };
 
     function updateScopeIndicators() {
@@ -499,7 +517,7 @@ function addExtra() {
         syncEQOverlayColors();
         scopeButtons.forEach(btn => {
             let s = btn.getAttribute("data-scope") || "LR";
-            btn.classList.toggle("selected", s === eqScope);
+            btn.classList.toggle("selected", s === eqSession.scope);
             let hasActive = getScopeFilters(s, false, true).length > 0;
             btn.classList.toggle("has-active", hasActive);
         });
@@ -508,8 +526,8 @@ function addExtra() {
     function setActiveEQScope(nextScope) {
         if (nextScope !== "LR" && nextScope !== "L" && nextScope !== "R") return;
         saveCurrentScopeDOM();
-        eqScope = nextScope;
-        let nextList = scopeFilters[eqScope] || cloneDefaultFilters();
+        eqSession.scope = nextScope;
+        let nextList = eqSession.scopes[eqSession.scope] || cloneDefaultFilters();
         filtersToElem(nextList);
         updateScopeIndicators();
         drawEQOverlay(0);
@@ -522,23 +540,23 @@ function addExtra() {
     });
 
     let resetDefaultFilters = () => {
-        scopeFilters.LR = cloneDefaultFilters();
-        scopeFilters.L = cloneDefaultFilters();
-        scopeFilters.R = cloneDefaultFilters();
-        filtersToElem(scopeFilters[eqScope]);
-        eqOverlayEnabled = false;
-        eqOverlayUserDismissed = false;
-        eqOverlayUserEnabled = false;
+        eqSession.scopes.LR = cloneDefaultFilters();
+        eqSession.scopes.L = cloneDefaultFilters();
+        eqSession.scopes.R = cloneDefaultFilters();
+        filtersToElem(eqSession.scopes[eqSession.scope]);
+        eqSession.overlayEnabled = false;
+        eqSession.overlayDismissed = false;
+        eqSession.overlayUserEnabled = false;
         syncEqOverlayButton();
         setBypassState(false, false);
         updateScopeIndicators();
     };
 
     let setBypassState = (bypassed, shouldApply = true) => {
-        isBypassed = !!bypassed;
+        eqSession.bypassed = !!bypassed;
         if (disableFiltersBtn) {
-            disableFiltersBtn.classList.toggle("selected", isBypassed);
-            disableFiltersBtn.innerText = isBypassed ? "Bypassed" : "Bypass";
+            disableFiltersBtn.classList.toggle("selected", eqSession.bypassed);
+            disableFiltersBtn.innerText = eqSession.bypassed ? "Bypassed" : "Bypass";
         }
         if (shouldApply) {
             applyEQ();
@@ -570,8 +588,8 @@ function addExtra() {
         let phonesList = (typeof activePhones !== "undefined" && Array.isArray(activePhones)) ? activePhones : [];
         let eqPhone = null;
 
-        if (activeEditingPresetId) {
-            eqPhone = phonesList.find(p => p && p.isEQSnapshot && p.eqSnapshotId === activeEditingPresetId && p.active) || null;
+        if (eqSession.editingPresetId) {
+            eqPhone = phonesList.find(p => p && p.isEQSnapshot && p.eqSnapshotId === eqSession.editingPresetId && p.active) || null;
         }
         if (!eqPhone) {
             let phoneSelected = eqPhoneSelect ? eqPhoneSelect.value : "";
@@ -601,7 +619,8 @@ function addExtra() {
         let h = isNaN(baseHcl.h) ? 245 : baseHcl.h;
         let c = isNaN(baseHcl.c) ? 75 : baseHcl.c;
         let l = isNaN(baseHcl.l) ? 68 : baseHcl.l;
-        let lighterHcl = d3.hcl(h, Math.max(25, c * 0.92), Math.min(86, l + 10));
+        let chroma = c < 5 ? c : Math.max(25, c * 0.92);
+        let lighterHcl = d3.hcl(h, chroma, Math.min(86, l + 10));
         let rgb = d3.rgb(lighterHcl);
         if (!rgb || isNaN(rgb.r)) return;
 
@@ -609,11 +628,19 @@ function addExtra() {
         let g = Math.round(Math.max(0, Math.min(255, rgb.g)));
         let b = Math.round(Math.max(0, Math.min(255, rgb.b)));
         let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        let rootStyle = document.documentElement.style;
-        rootStyle.setProperty("--eq-overlay-color", `rgb(${r}, ${g}, ${b})`);
-        rootStyle.setProperty("--eq-overlay-fill", `rgba(${r}, ${g}, ${b}, 0.055)`);
-        rootStyle.setProperty("--eq-overlay-ref", `rgba(${r}, ${g}, ${b}, 0.24)`);
-        rootStyle.setProperty("--eq-handle-text", lum > 145 ? "#111111" : "#ffffff");
+        let overlayColor = `rgb(${r}, ${g}, ${b})`;
+        let overlayFill = `rgba(${r}, ${g}, ${b}, 0.055)`;
+        let overlayRef = `rgba(${r}, ${g}, ${b}, 0.24)`;
+        let handleText = lum > 145 ? "#111111" : "#ffffff";
+
+        // Apply on both <html> and <body> because body.theme-dark / body.theme-contrast redeclare --eq-overlay-* on <body>
+        [document.documentElement, document.body].forEach(el => {
+            if (!el || !el.style) return;
+            el.style.setProperty("--eq-overlay-color", overlayColor);
+            el.style.setProperty("--eq-overlay-fill", overlayFill);
+            el.style.setProperty("--eq-overlay-ref", overlayRef);
+            el.style.setProperty("--eq-handle-text", handleText);
+        });
     }
 
     let hoveredBandIdx = null;
@@ -665,9 +692,9 @@ function addExtra() {
     function getCurrentScopeHandleItems(center) {
         let list = (filterEnabledInput && filterEnabledInput.length)
             ? readDOMFilters(true)
-            : (scopeFilters[eqScope] || []);
+            : (eqSession.scopes[eqSession.scope] || []);
         let hasActiveBand = list.some(f => f && !f.disabled && f.type && f.freq >= 20 && f.freq <= 20000 && f.q > 0 && Math.abs(f.gain) >= 0.05);
-        let userStartedEQ = hasActiveBand || activeDragIdx !== null || eqOverlayUserEnabled || list.length > DEFAULT_EQ_FILTERS.length;
+        let userStartedEQ = hasActiveBand || activeDragIdx !== null || eqSession.overlayUserEnabled || list.length > DEFAULT_EQ_FILTERS.length;
         if (!userStartedEQ) return [];
 
         let items = [];
@@ -714,7 +741,7 @@ function addExtra() {
             .append("path")
             .attr("class", "eq-band-preview")
             .merge(previewSel)
-            .classed("is-bypassed", isBypassed)
+            .classed("is-bypassed", eqSession.bypassed)
             .attr("d", d => {
                 let areaGen = d3.area()
                     .x(p => x(p[0]))
@@ -764,7 +791,7 @@ function addExtra() {
     }
 
     function onSidebarBandHover(bandIdx) {
-        if (!eqOverlayEnabled || isGraphToolBlockingHandles() || dragState) return;
+        if (!eqSession.overlayEnabled || isGraphToolBlockingHandles() || dragState) return;
         let items = getCurrentScopeHandleItems(getEffectiveCenter());
         if (!items.some(it => it.idx === bandIdx)) return;
         hoveredBandIdx = bandIdx;
@@ -807,6 +834,22 @@ function addExtra() {
         return (datum && typeof datum.idx === "number") ? datum.idx : -1;
     }
 
+    function findClosestHandleBandIdx(clientX, clientY) {
+        let pt = clientToSvgPoint(clientX, clientY);
+        if (!pt) return -1;
+        let items = getCurrentScopeHandleItems(getEffectiveCenter());
+        let bestIdx = -1;
+        let bestDist = 14;
+        for (let i = 0; i < items.length; i++) {
+            let dist = Math.hypot(pt[0] - items[i].cx, pt[1] - items[i].cy);
+            if (dist <= bestDist) {
+                bestDist = dist;
+                bestIdx = items[i].idx;
+            }
+        }
+        return bestIdx;
+    }
+
     function bindHandleLayerEvents() {
         if (handleLayerEventsBound || typeof eqHandlesLayer === "undefined" || !eqHandlesLayer || eqHandlesLayer.empty()) return;
         let layerNode = eqHandlesLayer.node();
@@ -817,40 +860,60 @@ function addExtra() {
             if (!dragState) return;
             if (ev && ev.pointerId !== undefined && ev.pointerId !== dragState.pointerId) return;
             let endedIdx = dragState.bandIdx;
+            let didMove = !!dragState.hasMoved;
             let pid = dragState.pointerId;
+            let hadCapture = !!dragState.hasCapture;
             dragState = null;
             activeDragIdx = null;
             window.removeEventListener("pointermove", onWindowPointerMove);
             window.removeEventListener("pointerup", onWindowPointerUp);
             window.removeEventListener("pointercancel", onWindowPointerCancel);
-            try {
-                if (layerNode.hasPointerCapture && layerNode.hasPointerCapture(pid)) {
-                    layerNode.releasePointerCapture(pid);
-                }
-            } catch (_) {}
-
-            if (!skipRedraw) {
-                let latest = readDOMFilters(true)[endedIdx];
-                if (!latest || Math.abs(latest.gain) < 0.05) {
-                    if (hoveredBandIdx === endedIdx) hoveredBandIdx = null;
-                } else if (ev && typeof ev.clientX === "number" && typeof ev.clientY === "number" && typeof document.elementFromPoint === "function") {
-                    let under = document.elementFromPoint(ev.clientX, ev.clientY);
-                    let overIdx = getBandIdxFromEventTarget(under);
-                    hoveredBandIdx = overIdx >= 0 ? overIdx : null;
-                }
+            if (hadCapture) {
+                try {
+                    if (layerNode.hasPointerCapture && layerNode.hasPointerCapture(pid)) {
+                        layerNode.releasePointerCapture(pid);
+                    }
+                } catch (_) {}
             }
-            flushPendingApplyEQ();
-            if (!skipRedraw) {
-                drawEQHandles();
+
+            if (didMove) {
+                if (!skipRedraw) {
+                    let latest = readDOMFilters(true)[endedIdx];
+                    if (!latest || Math.abs(latest.gain) < 0.05) {
+                        if (hoveredBandIdx === endedIdx) hoveredBandIdx = null;
+                    } else if (ev && typeof ev.clientX === "number" && typeof ev.clientY === "number" && typeof document.elementFromPoint === "function") {
+                        let under = document.elementFromPoint(ev.clientX, ev.clientY);
+                        let overIdx = getBandIdxFromEventTarget(under);
+                        hoveredBandIdx = overIdx >= 0 ? overIdx : null;
+                    }
+                }
+                flushPendingApplyEQ();
+                flushAutoSave();
+                if (!skipRedraw) {
+                    drawEQHandles();
+                }
             }
         };
         cleanupActiveDrag = finishActiveDrag;
 
         const onWindowPointerMove = (ev) => {
             if (!dragState || ev.pointerId !== dragState.pointerId) return;
-            if (!eqOverlayEnabled || isGraphToolBlockingHandles()) {
+            if (!eqSession.overlayEnabled || isGraphToolBlockingHandles()) {
                 finishActiveDrag(ev);
                 return;
+            }
+            if (!dragState.hasMoved) {
+                let movePx = Math.hypot(ev.clientX - dragState.startClientX, ev.clientY - dragState.startClientY);
+                if (movePx <= 3) return;
+                dragState.hasMoved = true;
+                activeDragIdx = dragState.bandIdx;
+                hoveredBandIdx = dragState.bandIdx;
+                try {
+                    if (layerNode.setPointerCapture) {
+                        layerNode.setPointerCapture(ev.pointerId);
+                        dragState.hasCapture = true;
+                    }
+                } catch (_) {}
             }
             let pt = clientToSvgPoint(ev.clientX, ev.clientY);
             if (!pt) return;
@@ -875,7 +938,7 @@ function addExtra() {
         const onWindowPointerCancel = (ev) => finishActiveDrag(ev);
 
         layerNode.addEventListener("pointerdown", (ev) => {
-            if (!eqOverlayEnabled || isGraphToolBlockingHandles()) return;
+            if (!eqSession.overlayEnabled || isGraphToolBlockingHandles()) return;
             if (ev.pointerType === "mouse" && ev.button !== 0) return;
             let bandIdx = getBandIdxFromEventTarget(ev.target);
             if (bandIdx < 0 || bandIdx >= eqBands) return;
@@ -884,38 +947,32 @@ function addExtra() {
             let startPt = clientToSvgPoint(ev.clientX, ev.clientY);
             if (!startPt) return;
 
-            ev.preventDefault();
             ev.stopPropagation();
             clearTimeout(wheelTipTimer);
 
-            if (dragState) finishActiveDrag();
+            if (dragState) finishActiveDrag(null, true);
             let center = getEffectiveCenter();
             dragState = {
                 pointerId: ev.pointerId,
                 bandIdx,
+                startClientX: ev.clientX,
+                startClientY: ev.clientY,
                 prevSvgPt: startPt,
                 curPx: [
                     Math.max(pad.l, Math.min(pad.l + W, x(f.freq))),
                     Math.max(pad.t, Math.min(pad.t + H, y(center + f.gain)))
-                ]
+                ],
+                hasMoved: false,
+                hasCapture: false
             };
-            activeDragIdx = bandIdx;
-            hoveredBandIdx = bandIdx;
-
-            try {
-                if (layerNode.setPointerCapture) {
-                    layerNode.setPointerCapture(ev.pointerId);
-                }
-            } catch (_) {}
 
             window.addEventListener("pointermove", onWindowPointerMove);
             window.addEventListener("pointerup", onWindowPointerUp);
             window.addEventListener("pointercancel", onWindowPointerCancel);
-            drawEQHandles();
         });
 
         layerNode.addEventListener("pointerover", (ev) => {
-            if (dragState || !eqOverlayEnabled || isGraphToolBlockingHandles()) return;
+            if (dragState || !eqSession.overlayEnabled || isGraphToolBlockingHandles()) return;
             let bandIdx = getBandIdxFromEventTarget(ev.target);
             if (bandIdx < 0 || hoveredBandIdx === bandIdx) return;
             clearTimeout(wheelTipTimer);
@@ -936,23 +993,47 @@ function addExtra() {
         });
 
         layerNode.addEventListener("dblclick", (ev) => {
-            if (!eqOverlayEnabled || isGraphToolBlockingHandles()) return;
+            if (!eqSession.overlayEnabled || isGraphToolBlockingHandles()) return;
             let bandIdx = getBandIdxFromEventTarget(ev.target);
+            if (bandIdx < 0) {
+                bandIdx = findClosestHandleBandIdx(ev.clientX, ev.clientY);
+            }
             if (bandIdx < 0 || bandIdx >= eqBands) return;
             ev.stopPropagation();
             ev.preventDefault();
             clearTimeout(wheelTipTimer);
-            if (dragState) finishActiveDrag();
+            if (dragState) finishActiveDrag(null, true);
             activeDragIdx = null;
             hoveredBandIdx = null;
-            applyHandleValues(bandIdx, null, 0, null);
+
+            saveCurrentScopeDOM();
+            let currentList = readDOMFilters(true);
+            let targetFilter = currentList[bandIdx];
+            if (!targetFilter) return;
+
+            if (typeof targetFilter.baselineSlot === "number" &&
+                targetFilter.baselineSlot >= 0 &&
+                targetFilter.baselineSlot < DEFAULT_EQ_FILTERS.length) {
+                let base = DEFAULT_EQ_FILTERS[targetFilter.baselineSlot];
+                filterEnabledInput[bandIdx].checked = true;
+                filterTypeSelect[bandIdx].value = base.type;
+                filterFreqInput[bandIdx].value = String(base.freq);
+                filterGainInput[bandIdx].value = "0";
+                filterQInput[bandIdx].value = String(base.q);
+                applyEQ();
+            } else {
+                currentList.splice(bandIdx, 1);
+                filtersToElem(currentList);
+                applyEQ();
+            }
+            flushAutoSave();
             if (typeof window.trackFeatureUsed === "function") {
                 window.trackFeatureUsed("eq_handle_used");
             }
         });
 
         layerNode.addEventListener("wheel", (ev) => {
-            if (!eqOverlayEnabled || isGraphToolBlockingHandles()) return;
+            if (!eqSession.overlayEnabled || isGraphToolBlockingHandles()) return;
             let bandIdx = getBandIdxFromEventTarget(ev.target);
             if (bandIdx < 0 || bandIdx >= eqBands) return;
             ev.preventDefault();
@@ -975,7 +1056,7 @@ function addExtra() {
     function drawEQHandles() {
         if (typeof eqHandlesLayer === "undefined" || !eqHandlesLayer || eqHandlesLayer.empty()) return;
         bindHandleLayerEvents();
-        if (!eqOverlayEnabled) {
+        if (!eqSession.overlayEnabled) {
             if (dragState && cleanupActiveDrag) cleanupActiveDrag(null, true);
             eqHandlesLayer.selectAll("*").remove();
             syncSidebarHandleHighlight(null);
@@ -994,7 +1075,7 @@ function addExtra() {
         }
 
         eqHandlesLayer
-            .classed("is-bypassed", isBypassed)
+            .classed("is-bypassed", eqSession.bypassed)
             .classed("is-tool-blocked", isGraphToolBlockingHandles());
 
         let handlesSel = handlesGroup.selectAll("g.eq-band-handle")
@@ -1051,29 +1132,89 @@ function addExtra() {
         }
     };
 
+    function isEqualizerTabActive() {
+        let selEl = document.querySelector("div.select");
+        return !!(selEl && selEl.getAttribute("data-selected") === "extra");
+    }
+
     window.onGraphDoubleClickEQ = function (pt) {
-        if (!eqOverlayEnabled || isGraphToolBlockingHandles() || !pt) return;
+        if (!isEqualizerTabActive() || isGraphToolBlockingHandles() || !pt) return;
         let center = getEffectiveCenter();
         let nextFreq = Math.max(20, Math.min(20000, Math.round(x.invert(Math.max(pad.l, Math.min(pad.l + W, pt[0]))))));
         let nextGain = Math.max(-40, Math.min(40, Math.round((y.invert(Math.max(pad.t, Math.min(pad.t + H, pt[1]))) - center) * 10) / 10));
-        if (Math.abs(nextGain) < 0.2) nextGain = 1.0;
+        if (Math.abs(nextGain) < 0.1) nextGain = 0.5;
 
         saveCurrentScopeDOM();
         let currentList = readDOMFilters(true);
-        let targetIdx = -1;
-        if (eqBands < extraEQBandsMax) {
-            eqBands = Math.min(eqBands + 1, extraEQBandsMax);
-            updateFilterElements();
-            targetIdx = eqBands - 1;
-            filterEnabledInput[targetIdx].checked = true;
-            filterTypeSelect[targetIdx].value = "PK";
-            filterQInput[targetIdx].value = "1";
-        } else {
-            targetIdx = currentList.findIndex(f => !f.disabled && Math.abs(f.gain) < 0.05);
-            if (targetIdx < 0) return;
-            filterTypeSelect[targetIdx].value = "PK";
-            filterQInput[targetIdx].value = "1";
+
+        if (!eqSession.overlayEnabled) {
+            eqSession.overlayEnabled = true;
+            eqSession.overlayDismissed = false;
+            eqSession.overlayUserEnabled = true;
+            syncEqOverlayButton();
+
+            let logTarget = Math.log(Math.max(20, nextFreq));
+            let bestIdx = -1;
+            let bestDist = Infinity;
+            for (let i = 0; i < currentList.length; i++) {
+                let f = currentList[i];
+                if (!f || f.disabled) continue;
+                if (typeof f.baselineSlot !== "number") continue;
+                let dist = Math.abs(Math.log(Math.max(20, f.freq || 1000)) - logTarget);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIdx = i;
+                }
+            }
+            if (bestIdx < 0) {
+                for (let i = 0; i < currentList.length; i++) {
+                    let f = currentList[i];
+                    if (!f) continue;
+                    if (typeof f.baselineSlot !== "number" && i >= DEFAULT_EQ_FILTERS.length) continue;
+                    let dist = Math.abs(Math.log(Math.max(20, f.freq || 1000)) - logTarget);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestIdx = i;
+                    }
+                }
+            }
+            if (bestIdx < 0) bestIdx = 0;
+            if (filterEnabledInput[bestIdx]) {
+                filterEnabledInput[bestIdx].checked = true;
+            }
+            hoveredBandIdx = bestIdx;
+            applyHandleValues(bestIdx, nextFreq, nextGain, null);
+            if (typeof window.trackFeatureUsed === "function") {
+                window.trackFeatureUsed("eq_handle_used");
+            }
+            clearTimeout(wheelTipTimer);
+            wheelTipTimer = setTimeout(() => {
+                if (activeDragIdx === null && hoveredBandIdx === bestIdx) {
+                    hoveredBandIdx = null;
+                    drawEQHandles();
+                }
+            }, 1200);
+            return;
         }
+
+        if (eqBands >= extraEQBandsMax) {
+            if (typeof showGraphNotice === "function") {
+                showGraphNotice("Maximum of " + extraEQBandsMax + " EQ bands reached.");
+            }
+            return;
+        }
+
+        eqBands = Math.min(eqBands + 1, extraEQBandsMax);
+        updateFilterElements();
+        let targetIdx = eqBands - 1;
+        let newRow = filtersContainer.children[targetIdx];
+        if (newRow) {
+            delete newRow.dataset.baselineSlot;
+        }
+        filterEnabledInput[targetIdx].checked = true;
+        filterTypeSelect[targetIdx].value = "PK";
+        filterQInput[targetIdx].value = "1";
+
         hoveredBandIdx = targetIdx;
         applyHandleValues(targetIdx, nextFreq, nextGain, 1);
         if (typeof window.trackFeatureUsed === "function") {
@@ -1091,7 +1232,7 @@ function addExtra() {
     function drawEQOverlay(durationMs) {
         syncEQOverlayColors();
         if (typeof eqOverlayLayer === "undefined" || !eqOverlayLayer || eqOverlayLayer.empty()) return;
-        if (!eqOverlayEnabled) {
+        if (!eqSession.overlayEnabled) {
             eqOverlayLayer.selectAll("*").remove();
             if (dragState && cleanupActiveDrag) {
                 cleanupActiveDrag(null, true);
@@ -1117,7 +1258,7 @@ function addExtra() {
             .append("line")
             .attr("class", "eq-overlay-ref")
             .merge(refLine)
-            .classed("is-bypassed", isBypassed)
+            .classed("is-bypassed", eqSession.bypassed)
             .attr("x1", pad.l)
             .attr("x2", pad.l + W)
             .attr("y1", y(center))
@@ -1136,7 +1277,7 @@ function addExtra() {
             .append("path")
             .attr("class", "eq-overlay-area")
             .merge(areaPath)
-            .classed("is-bypassed", isBypassed);
+            .classed("is-bypassed", eqSession.bypassed);
         if (durationMs) {
             areaSel.transition().duration(durationMs).attr("d", d => areaGen(d));
         } else {
@@ -1151,7 +1292,7 @@ function addExtra() {
             .attr("class", "eq-overlay-line")
             .merge(strokePath)
             .classed("is-flat", !hasConfigured)
-            .classed("is-bypassed", isBypassed);
+            .classed("is-bypassed", eqSession.bypassed);
         if (durationMs) {
             strokeSel.transition().duration(durationMs).attr("d", d => line(d));
         } else {
@@ -1252,7 +1393,7 @@ function addExtra() {
             return;
         }
         let peakStr = state.worstPeakPreamp.toFixed(1) + " dB";
-        if (isBypassed) {
+        if (eqSession.bypassed) {
             preampDisplay.innerText = "Pre-amp: " + peakStr + " · Auto-Gain: Bypassed";
         } else {
             preampDisplay.innerText = "Pre-amp: " + peakStr + " · Auto-Gain: " + fmtDb(state.autoGainDb);
@@ -1262,7 +1403,23 @@ function addExtra() {
             " | Shared Clip Guard: " + fmtDb(state.sharedSafetyDb);
     }
 
-    let userExplicitlyPickedSandbox = false;
+    function resolveEditorBasePhone() {
+        let phoneSelected = eqPhoneSelect ? eqPhoneSelect.value : "";
+        let phonesList = (typeof activePhones !== "undefined" && Array.isArray(activePhones)) ? activePhones : [];
+        let selectedPhoneObj = phoneSelected && phonesList.find(
+            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName === phoneSelected)
+        );
+        if (selectedPhoneObj) return selectedPhoneObj;
+        if (!eqSession.pickedSandbox && eqSession.editingPresetId) {
+            let activeSnap = findActiveSnapshotCurve(eqSession.editingPresetId);
+            if (activeSnap && !activeSnap.isSandboxEQ && activeSnap.eqBasePhone &&
+                (!phoneSelected || activeSnap.eqBaseKey === phoneSelected)) {
+                return activeSnap.eqBasePhone;
+            }
+        }
+        return null;
+    }
+
     let applyEQHandle = null;
     let applyEQUseRaf = false;
     let applyEQExec = (skipRedraw) => {
@@ -1271,32 +1428,16 @@ function addExtra() {
         let anyActive = hasAnyActiveFilters(false);
         let hasSplits = hasChannelTrimFilters(true);
 
-        if (activeEditingPresetId) {
-            let editingPreset = savedEQPresets.find(x => x.id === activeEditingPresetId);
+        if (eqSession.editingPresetId) {
+            let editingPreset = savedEQPresets.find(x => x.id === eqSession.editingPresetId);
             let editingSnap = editingPreset ? findActiveSnapshotCurve(editingPreset.id) : null;
             if (editingPreset && editingSnap) {
                 activePhones
                     .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
                     .forEach(q => removePhone(q));
 
-                let selectedPhoneObj = phoneSelected && activePhones.filter(
-                    p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
-
-                let previewBasePhone = selectedPhoneObj
-                    || (!userExplicitlyPickedSandbox && !editingSnap.isSandboxEQ && editingSnap.eqBasePhone ? editingSnap.eqBasePhone : null);
-
-                let draftPreset = {
-                    id: editingPreset.id,
-                    name: editingPreset.name,
-                    scopes: {
-                        LR: getScopeFilters("LR", true, true),
-                        L: getScopeFilters("L", true, true),
-                        R: getScopeFilters("R", true, true)
-                    },
-                    balance: getCurrentChannelBalanceValue(),
-                    model: captureCurrentModelMeta(previewBasePhone)
-                };
-                mountSnapshotCurve(draftPreset, previewBasePhone, isBypassed);
+                let previewBasePhone = resolveEditorBasePhone();
+                mountSnapshotCurve(editingPreset, previewBasePhone, eqSession.bypassed);
                 updatePreampDisplay();
                 if (!skipRedraw) {
                     drawEQOverlay(0);
@@ -1305,10 +1446,10 @@ function addExtra() {
                 }
                 return;
             }
-            activeEditingPresetId = null;
+            eqSession.editingPresetId = null;
         }
 
-        if (anyActive && !phoneSelected && !userExplicitlyPickedSandbox) {
+        if (anyActive && !phoneSelected && !eqSession.pickedSandbox) {
             let firstPhone = eqPhoneSelect.querySelectorAll("option")[1];
             if (firstPhone) {
                 phoneSelected = eqPhoneSelect.value = firstPhone.value;
@@ -1340,15 +1481,25 @@ function addExtra() {
                 updatePreampDisplay();
             } else {
                 let activeElem = document.activeElement;
-                let phoneEQ = { name: phoneObj.dispName + " EQ" };
-                let phoneObjEQ = addOrUpdatePhone(phoneObj.brand, phoneEQ, channels);
+                let eqName = phoneObj.dispName + " EQ";
+                let prevEQ = phoneObj.eq;
+                if (prevEQ && prevEQ.active) {
+                    removePhone(prevEQ);
+                }
+                let phoneObjEQ = asPhoneObj(phoneObj.brand, { name: eqName });
+                phoneObjEQ.rawChannels = channels;
+                phoneObjEQ.isDynamic = true;
+                if (prevEQ) {
+                    if (prevEQ.id !== undefined) phoneObjEQ.id = prevEQ.id;
+                    if (prevEQ.offset !== undefined) phoneObjEQ.offset = prevEQ.offset;
+                }
                 phoneObj.eq = phoneObjEQ;
                 phoneObjEQ.eqParent = phoneObj;
                 phoneObjEQ.sampleLabels = phoneObj.sampleLabels;
                 phoneObjEQ.sampleSeatings = phoneObj.sampleSeatings;
                 phoneObjEQ.hasChannelSplits = hasSplits;
                 updatePreampDisplay();
-                showPhone(phoneObjEQ, false);
+                showPhone(phoneObjEQ, false, true);
                 if (activeElem && typeof activeElem.focus === "function") {
                     activeElem.focus();
                 }
@@ -1376,6 +1527,9 @@ function addExtra() {
     }
 
     let applyEQ = () => {
+        saveCurrentScopeDOM();
+        scheduleAutoSave(false, false);
+
         if (applyEQHandle === null) {
             if (typeof requestAnimationFrame === "function") {
                 applyEQUseRaf = true;
@@ -1399,11 +1553,11 @@ function addExtra() {
         if (hasConfigured && typeof window.trackFeatureUsed === "function") {
             window.trackFeatureUsed("eq_adjusted");
         }
-        if (hasConfigured && !eqOverlayEnabled && !eqOverlayUserDismissed) {
-            eqOverlayEnabled = true;
+        if (hasConfigured && !eqSession.overlayEnabled && !eqSession.overlayDismissed) {
+            eqSession.overlayEnabled = true;
             syncEqOverlayButton();
         } else if (!hasConfigured) {
-            eqOverlayUserDismissed = false;
+            eqSession.overlayDismissed = false;
         }
 
         updatePreampDisplay();
@@ -1418,6 +1572,19 @@ function addExtra() {
             !p.isPrefBounds && !p.isTarget && !p.eqParent && !p.isEQSnapshot &&
             (!p.dispName || !p.dispName.match(/ EQ( Saved \d+)?$/))
         ).map(p => (p.brand && p.brand.name ? p.brand.name + " " : "") + p.dispName);
+
+        // Preserve locked base headphone option while editing a preset even if its reference curve is removed from the graph
+        let lockedBaseKey = "";
+        if (eqSession.editingPresetId && !eqSession.pickedSandbox) {
+            let activeSnap = findActiveSnapshotCurve(eqSession.editingPresetId);
+            if (activeSnap && !activeSnap.isSandboxEQ && activeSnap.eqBaseKey) {
+                lockedBaseKey = activeSnap.eqBaseKey;
+                if (optionValues.indexOf(lockedBaseKey) < 0) {
+                    optionValues.push(lockedBaseKey);
+                }
+            }
+        }
+
         Array.from(eqPhoneSelect.children).slice(1).forEach(c => eqPhoneSelect.removeChild(c));
         optionValues.forEach(value => {
             let optionElem = document.createElement("option");
@@ -1425,12 +1592,14 @@ function addExtra() {
             optionElem.innerText = value;
             eqPhoneSelect.appendChild(optionElem);
         });
-        if (userExplicitlyPickedSandbox && oldValue === "") {
+        if (eqSession.pickedSandbox && oldValue === "") {
             eqPhoneSelect.value = "";
+        } else if (lockedBaseKey && optionValues.indexOf(lockedBaseKey) >= 0 && (!oldValue || oldValue === lockedBaseKey)) {
+            eqPhoneSelect.value = lockedBaseKey;
         } else {
             eqPhoneSelect.value = (optionValues.indexOf(oldValue) >= 0) ? oldValue : "";
             if (!eqPhoneSelect.value && oldValue !== "") {
-                userExplicitlyPickedSandbox = false;
+                eqSession.pickedSandbox = false;
             }
         }
         syncEQOverlayColors();
@@ -1440,17 +1609,28 @@ function addExtra() {
     resetDefaultFilters();
     eqPhoneSelect.addEventListener("input", () => {
         if (!eqPhoneSelect.value) {
-            userExplicitlyPickedSandbox = true;
+            eqSession.pickedSandbox = true;
             activePhones
                 .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
                 .forEach(q => removePhone(q));
         } else {
-            userExplicitlyPickedSandbox = false;
+            eqSession.pickedSandbox = false;
             let selectedKey = eqPhoneSelect.value;
             activePhones
                 .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot &&
                     (!q.eqParent.brand || (q.eqParent.brand.name + " " + q.eqParent.dispName) !== selectedKey))
                 .forEach(q => removePhone(q));
+        }
+        if (eqSession.editingPresetId) {
+            let editedPreset = scheduleAutoSave(true, true) || syncEditingPresetInMemory(true);
+            let nextBase = eqSession.pickedSandbox ? null : resolveEditorBasePhone();
+            if (editedPreset) {
+                mountSnapshotCurve(editedPreset, nextBase, eqSession.bypassed);
+            }
+            renderSavedEQList();
+            drawEQOverlay(0);
+            updatePreampDisplay();
+            return;
         }
         applyEQ();
     });
@@ -1460,9 +1640,10 @@ function addExtra() {
         saveCurrentScopeDOM();
         eqBands = Math.min(eqBands + 1, extraEQBandsMax);
         updateFilterElements();
-        scopeFilters[eqScope] = readDOMFilters(true);
-        if (!eqOverlayEnabled && !eqOverlayUserDismissed) {
-            eqOverlayEnabled = true;
+        eqSession.scopes[eqSession.scope] = readDOMFilters(true);
+        scheduleAutoSave(false, false);
+        if (!eqSession.overlayEnabled && !eqSession.overlayDismissed) {
+            eqSession.overlayEnabled = true;
             syncEqOverlayButton();
         }
         drawEQOverlay(0);
@@ -1473,7 +1654,7 @@ function addExtra() {
         saveCurrentScopeDOM();
         eqBands = Math.max(eqBands - 1, 1);
         updateFilterElements();
-        scopeFilters[eqScope] = readDOMFilters(true);
+        eqSession.scopes[eqSession.scope] = readDOMFilters(true);
         applyEQ();
     });
 
@@ -1486,18 +1667,25 @@ function addExtra() {
 
     // Non-destructive master bypass toggle
     disableFiltersBtn.addEventListener("click", () => {
-        setBypassState(!isBypassed, true);
+        setBypassState(!eqSession.bypassed, true);
         if (typeof window.trackFeatureUsed === "function") {
             window.trackFeatureUsed("eq_bypass");
         }
     });
 
-    // Reset all scopes back to clean 8-band standard rack (all 0.0 dB)
+    // Reset all scopes, balance, and bypass back to clean defaults, and deselect any active Custom EQ preset without losing it
     let resetFiltersBtn = document.querySelector("div.extra-eq button.reset-filters");
     if (resetFiltersBtn) {
         resetFiltersBtn.addEventListener("click", () => {
-            resetDefaultFilters();
-            applyEQ();
+            flushPendingApplyEQ();
+            flushAutoSave();
+            let prevId = eqSession.editingPresetId;
+            eqSession.editingPresetId = null;
+            if (prevId) {
+                let activeSnap = findActiveSnapshotCurve(prevId);
+                if (activeSnap) removePhone(activeSnap);
+            }
+            resetEditorToDefaults({ clearScratchEQ: true });
         });
     }
 
@@ -1510,27 +1698,42 @@ function addExtra() {
 
     function cloneFilterArray(list) {
         if (!Array.isArray(list) || !list.length) return cloneDefaultFilters();
-        return list.map(f => ({
-            type: f && f.type ? String(f.type) : "PK",
-            freq: Number.isFinite(Number(f && f.freq)) ? Number(f.freq) : 1000,
-            gain: Number.isFinite(Number(f && f.gain)) ? Number(f.gain) : 0,
-            q: Number.isFinite(Number(f && f.q)) ? Number(f.q) : 1.0,
-            disabled: !!(f && f.disabled)
-        }));
+        return list.map((f, idx) => {
+            let slot = null;
+            if (f && typeof f.baselineSlot === "number" && f.baselineSlot >= 0 && f.baselineSlot < DEFAULT_EQ_FILTERS.length) {
+                slot = f.baselineSlot;
+            } else if (f && f.baselineSlot === null) {
+                slot = null;
+            } else if (idx < DEFAULT_EQ_FILTERS.length) {
+                slot = idx;
+            }
+            return {
+                type: f && f.type ? String(f.type) : "PK",
+                freq: Number.isFinite(Number(f && f.freq)) ? Number(f.freq) : 1000,
+                gain: Number.isFinite(Number(f && f.gain)) ? Number(f.gain) : 0,
+                q: Number.isFinite(Number(f && f.q)) ? Number(f.q) : 1.0,
+                disabled: !!(f && f.disabled),
+                baselineSlot: slot
+            };
+        });
+    }
+
+    function getNextCustomEqNumber() {
+        let used = new Set();
+        savedEQPresets.forEach(p => {
+            let m = String(p.name || "").trim().match(/^CUSTOM\s+EQ\s+(\d+)$/i);
+            if (m) {
+                let n = parseInt(m[1], 10);
+                if (Number.isFinite(n) && n >= 1) used.add(n);
+            }
+        });
+        let n = 1;
+        while (used.has(n)) n++;
+        return n;
     }
 
     function syncCustomEqCounterFloor() {
-        let minNext = 1;
-        savedEQPresets.forEach(p => {
-            let m = String(p.name || "").match(/^CUSTOM\s+EQ\s+(\d+)$/i);
-            if (m) {
-                let n = parseInt(m[1], 10);
-                if (Number.isFinite(n) && n >= minNext) minNext = n + 1;
-            }
-        });
-        if (customEqCounter < minNext) {
-            customEqCounter = minNext;
-        }
+        customEqCounter = getNextCustomEqNumber();
     }
 
     function loadSavedEQState() {
@@ -1603,10 +1806,9 @@ function addExtra() {
     }
 
     function buildSnapshotChannels(phoneObj, scopesObj, respectBypass) {
-        let ignoreByp = !respectBypass;
-        let totalL = (respectBypass && isBypassed) ? [] : buildActiveChannelFilterList(scopesObj, "L");
-        let totalR = (respectBypass && isBypassed) ? [] : buildActiveChannelFilterList(scopesObj, "R");
-        let totalLR = (respectBypass && isBypassed) ? [] : buildActiveChannelFilterList(scopesObj, "LR");
+        let totalL = (respectBypass && eqSession.bypassed) ? [] : buildActiveChannelFilterList(scopesObj, "L");
+        let totalR = (respectBypass && eqSession.bypassed) ? [] : buildActiveChannelFilterList(scopesObj, "R");
+        let totalLR = (respectBypass && eqSession.bypassed) ? [] : buildActiveChannelFilterList(scopesObj, "LR");
         let raw = (phoneObj && phoneObj.rawChannels && phoneObj.rawChannels.length) ? phoneObj.rawChannels : null;
         if (raw) {
             let lrLen = (typeof LR !== "undefined" && LR.length) ? LR.length : 2;
@@ -1721,13 +1923,13 @@ function addExtra() {
             existing.hasChannelSplits = splits;
             existing.smooth = null;
             smoothPhone(existing);
-            normalizePhone(existing);
             let wantAvg;
             if (prevSplits !== splits && !existing._userChannelOverride) {
                 let comparePhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent && !q.isEQSnapshot);
                 wantAvg = (comparePhones.length >= 2) ? false : !splits;
             }
             setCurves(existing, wantAvg);
+            normalizePhone(existing);
             if (typeof table !== "undefined") {
                 let tr = table.selectAll("tr").filter(q => q === existing);
                 tr.select("span.brand").text(brandLabel);
@@ -1764,29 +1966,54 @@ function addExtra() {
         return snapshotObj;
     }
 
-    function revertPresetCurveToSaved(preset) {
-        if (!preset) return;
-        let existing = findActiveSnapshotCurve(preset.id);
-        if (!existing) return;
-        if (!preset.model || preset.model.isSandbox) {
-            mountSnapshotCurve(preset, null, false);
-            return;
+    let autoSaveTimer = null;
+    let suppressAutoSave = false;
+
+    function syncEditingPresetInMemory(includeModel) {
+        if (suppressAutoSave || !eqSession.editingPresetId) return null;
+        let preset = savedEQPresets.find(p => p.id === eqSession.editingPresetId);
+        if (!preset) return null;
+        preset.scopes = {
+            LR: cloneFilterArray(eqSession.scopes.LR),
+            L: cloneFilterArray(eqSession.scopes.L),
+            R: cloneFilterArray(eqSession.scopes.R)
+        };
+        preset.balance = Math.max(-10, Math.min(10, Number(eqSession.balance) || 0));
+        if (includeModel) {
+            let resolvedBase = eqSession.pickedSandbox ? null : resolveEditorBasePhone();
+            preset.model = captureCurrentModelMeta(resolvedBase || null);
         }
-        let cachedPhone = resolvePhoneObjSynchronouslyByMeta(preset.model);
-        if (!cachedPhone && existing.eqBasePhone && existing.eqBasePhone.rawChannels) {
-            let baseKey = (existing.eqBasePhone.brand && existing.eqBasePhone.brand.name ? existing.eqBasePhone.brand.name + " " : "") + (existing.eqBasePhone.dispName || "");
-            if ((preset.model.fileName && existing.eqBasePhone.fileName === preset.model.fileName) ||
-                (preset.model.key && baseKey === preset.model.key)) {
-                cachedPhone = existing.eqBasePhone;
-            }
+        return preset;
+    }
+
+    function scheduleAutoSave(includeModel, immediate) {
+        if (suppressAutoSave || !eqSession.editingPresetId) return null;
+        let preset = syncEditingPresetInMemory(includeModel);
+        if (!preset) return null;
+        clearTimeout(autoSaveTimer);
+        if (immediate) {
+            autoSaveTimer = null;
+            persistSavedEQState();
+        } else {
+            autoSaveTimer = setTimeout(() => {
+                autoSaveTimer = null;
+                persistSavedEQState();
+            }, 180);
         }
-        if (cachedPhone) {
-            mountSnapshotCurve(preset, cachedPhone, false);
-        } else if (typeof window.loadHeadphoneByMeta === "function") {
-            window.loadHeadphoneByMeta(preset.model, (phoneObj) => {
-                mountSnapshotCurve(preset, phoneObj || null, false);
-            });
+        return preset;
+    }
+
+    function flushAutoSave() {
+        if (autoSaveTimer !== null) {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = null;
+            persistSavedEQState();
         }
+    }
+
+    if (typeof window !== "undefined") {
+        window.addEventListener("beforeunload", flushAutoSave);
+        window.addEventListener("pagehide", flushAutoSave);
     }
 
     function syncSnapshotCurveName(preset) {
@@ -1810,7 +2037,7 @@ function addExtra() {
         pills.forEach(pill => {
             let id = pill.getAttribute("data-eq-id");
             let snap = findActiveSnapshotCurve(id);
-            let isEditing = (activeEditingPresetId === id && !!snap);
+            let isEditing = (eqSession.editingPresetId === id && !!snap);
             pill.classList.toggle("is-active", !!snap);
             pill.classList.toggle("is-editing", isEditing);
             let dot = pill.querySelector("span.eq-pill-dot");
@@ -1863,19 +2090,51 @@ function addExtra() {
     }
 
     function applyPresetValuesToEditor(preset) {
-        scopeFilters.LR = cloneFilterArray(preset.scopes && preset.scopes.LR);
-        scopeFilters.L = cloneFilterArray(preset.scopes && preset.scopes.L);
-        scopeFilters.R = cloneFilterArray(preset.scopes && preset.scopes.R);
-        filtersToElem(scopeFilters[eqScope] || scopeFilters.LR);
-        applyChannelBalance(preset.balance || 0);
-        setBypassState(false, false);
-        eqOverlayUserDismissed = false;
-        eqOverlayEnabled = true;
-        syncEqOverlayButton();
-        updateScopeIndicators();
-        updatePreampDisplay();
-        updateAudioFilters();
-        document.dispatchEvent(new CustomEvent("UpdateExtensionFilters", { detail: { filters: elemToFilters(false, false) } }));
+        suppressAutoSave = true;
+        try {
+            eqSession.scopes.LR = cloneFilterArray(preset.scopes && preset.scopes.LR);
+            eqSession.scopes.L = cloneFilterArray(preset.scopes && preset.scopes.L);
+            eqSession.scopes.R = cloneFilterArray(preset.scopes && preset.scopes.R);
+            filtersToElem(eqSession.scopes[eqSession.scope] || eqSession.scopes.LR);
+            applyChannelBalance(preset.balance || 0, false);
+            setBypassState(false, false);
+            eqSession.overlayDismissed = false;
+            eqSession.overlayEnabled = true;
+            syncEqOverlayButton();
+            updateScopeIndicators();
+            updatePreampDisplay();
+            updateAudioFilters();
+            document.dispatchEvent(new CustomEvent("UpdateExtensionFilters", { detail: { filters: elemToFilters(false, false) } }));
+        } finally {
+            suppressAutoSave = false;
+        }
+    }
+
+    function resetEditorToDefaults(options) {
+        let clearScratch = !options || options.clearScratchEQ !== false;
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = null;
+        suppressAutoSave = true;
+        try {
+            eqSession.editingPresetId = null;
+            eqSession.pickedSandbox = false;
+            resetDefaultFilters();
+            applyChannelBalance(0, false);
+            if (clearScratch && typeof activePhones !== "undefined") {
+                activePhones
+                    .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
+                    .forEach(q => removePhone(q));
+            }
+            updateEQPhoneSelect();
+            if (eqPhoneSelect) eqPhoneSelect.value = "";
+            updatePreampDisplay();
+            drawEQOverlay(0);
+            updateAudioFilters();
+            document.dispatchEvent(new CustomEvent("UpdateExtensionFilters", { detail: { filters: elemToFilters(false, false) } }));
+            renderSavedEQList();
+        } finally {
+            suppressAutoSave = false;
+        }
     }
 
     function focusPlottedPreset(preset) {
@@ -1886,22 +2145,21 @@ function addExtra() {
             return;
         }
         flushPendingApplyEQ();
+        flushAutoSave();
         activePhones
             .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
             .forEach(q => removePhone(q));
 
-        if (activeEditingPresetId && activeEditingPresetId !== preset.id) {
-            let prevPreset = savedEQPresets.find(x => x.id === activeEditingPresetId);
-            if (prevPreset) revertPresetCurveToSaved(prevPreset);
-        }
-
-        activeEditingPresetId = preset.id;
+        eqSession.editingPresetId = preset.id;
         applyPresetValuesToEditor(preset);
 
         if (existing.isSandboxEQ) {
-            userExplicitlyPickedSandbox = true;
+            eqSession.pickedSandbox = true;
+            updateEQPhoneSelect();
             eqPhoneSelect.value = "";
         } else {
+            eqSession.pickedSandbox = false;
+            updateEQPhoneSelect();
             let matchingActive = (existing.eqParent && existing.eqParent.active) ? existing.eqParent : null;
             if (!matchingActive && existing.eqBaseKey) {
                 matchingActive = activePhones.find(p =>
@@ -1909,12 +2167,11 @@ function addExtra() {
                     (p.brand.name + " " + p.dispName) === existing.eqBaseKey
                 ) || null;
             }
-            updateEQPhoneSelect();
             if (matchingActive && matchingActive.brand) {
-                userExplicitlyPickedSandbox = false;
                 eqPhoneSelect.value = matchingActive.brand.name + " " + matchingActive.dispName;
+            } else if (existing.eqBaseKey) {
+                eqPhoneSelect.value = existing.eqBaseKey;
             } else {
-                userExplicitlyPickedSandbox = false;
                 eqPhoneSelect.value = "";
             }
         }
@@ -1925,21 +2182,18 @@ function addExtra() {
     function activateSavedPreset(preset) {
         if (!preset) return;
         flushPendingApplyEQ();
+        flushAutoSave();
 
         activePhones
             .filter(q => q && q.eqParent && q.eqParent.eq === q && !q.isEQSnapshot)
             .forEach(q => removePhone(q));
 
-        if (activeEditingPresetId && activeEditingPresetId !== preset.id) {
-            let prevPreset = savedEQPresets.find(x => x.id === activeEditingPresetId);
-            if (prevPreset) revertPresetCurveToSaved(prevPreset);
-        }
-
-        activeEditingPresetId = preset.id;
+        eqSession.editingPresetId = preset.id;
         applyPresetValuesToEditor(preset);
 
         if (!preset.model || preset.model.isSandbox || typeof window.loadHeadphoneByMeta !== "function") {
-            userExplicitlyPickedSandbox = true;
+            eqSession.pickedSandbox = true;
+            updateEQPhoneSelect();
             eqPhoneSelect.value = "";
             mountSnapshotCurve(preset, null, false);
             drawEQOverlay(0);
@@ -1947,23 +2201,25 @@ function addExtra() {
             return;
         }
 
-        userExplicitlyPickedSandbox = false;
+        eqSession.pickedSandbox = false;
         window.loadHeadphoneByMeta(preset.model, (phoneObj) => {
+            if (eqSession.editingPresetId !== preset.id) return;
             if (!phoneObj) {
                 if (typeof showGraphNotice === "function") {
                     showGraphNotice("Headphone not found (" + (preset.model.key || preset.model.dispName || "Unknown") + "). Loaded filters in Sandbox.");
                 }
-                userExplicitlyPickedSandbox = true;
+                eqSession.pickedSandbox = true;
+                updateEQPhoneSelect();
                 eqPhoneSelect.value = "";
                 mountSnapshotCurve(preset, null, false);
                 drawEQOverlay(0);
                 renderSavedEQList();
                 return;
             }
+            mountSnapshotCurve(preset, phoneObj, false);
             updateEQPhoneSelect();
             let selectKey = (phoneObj.brand && phoneObj.brand.name ? phoneObj.brand.name + " " : "") + phoneObj.dispName;
             eqPhoneSelect.value = selectKey;
-            mountSnapshotCurve(preset, phoneObj, false);
             drawEQOverlay(0);
             renderSavedEQList();
         });
@@ -1971,76 +2227,35 @@ function addExtra() {
 
     function deselectSavedPreset(preset) {
         if (!preset) return;
+        flushPendingApplyEQ();
+        flushAutoSave();
         let existing = findActiveSnapshotCurve(preset.id);
         if (existing) {
             removePhone(existing);
+        } else if (eqSession.editingPresetId === preset.id) {
+            resetEditorToDefaults({ clearScratchEQ: true });
         } else {
-            if (activeEditingPresetId === preset.id) {
-                activeEditingPresetId = null;
-                drawEQOverlay(0);
-            }
             renderSavedEQList();
-        }
-    }
-
-    function overwriteSavedPreset(preset, saveBtnEl) {
-        if (!preset) return;
-        saveCurrentScopeDOM();
-        let balanceVal = getCurrentChannelBalanceValue();
-        if (!hasAnyActiveFilters(true) && Math.abs(balanceVal) < 0.01) {
-            if (typeof showGraphNotice === "function") {
-                showGraphNotice("Add an EQ filter or channel balance before overwriting.");
-            }
-            return;
-        }
-        let phoneSelected = eqPhoneSelect.value;
-        let phoneObj = phoneSelected && activePhones.filter(
-            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
-
-        if (!phoneObj && !userExplicitlyPickedSandbox && activeEditingPresetId === preset.id) {
-            let activeSnap = findActiveSnapshotCurve(preset.id);
-            if (activeSnap && !activeSnap.isSandboxEQ && activeSnap.eqBasePhone) {
-                phoneObj = activeSnap.eqBasePhone;
-            }
-        }
-
-        preset.scopes = {
-            LR: cloneFilterArray(scopeFilters.LR),
-            L: cloneFilterArray(scopeFilters.L),
-            R: cloneFilterArray(scopeFilters.R)
-        };
-        preset.balance = balanceVal;
-        preset.model = captureCurrentModelMeta(phoneObj || null);
-        persistSavedEQState();
-
-        if (findActiveSnapshotCurve(preset.id)) {
-            mountSnapshotCurve(preset, phoneObj || null, activeEditingPresetId === preset.id ? isBypassed : false);
-        }
-        renderSavedEQList();
-        if (saveBtnEl) {
-            let newBtn = eqSavedListEl && eqSavedListEl.querySelector('[data-eq-id="' + preset.id + '"] button.eq-pill-save');
-            if (newBtn) {
-                newBtn.classList.add("is-saved-flash");
-                setTimeout(() => newBtn.classList.remove("is-saved-flash"), 900);
-            }
-        }
-        if (typeof window.trackFeatureUsed === "function") {
-            window.trackFeatureUsed("eq_preset_updated");
         }
     }
 
     function deleteSavedPreset(preset) {
         if (!preset) return;
+        flushPendingApplyEQ();
+        if (eqSession.editingPresetId === preset.id) {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = null;
+        } else {
+            flushAutoSave();
+        }
         savedEQPresets = savedEQPresets.filter(p => p.id !== preset.id);
         persistSavedEQState();
         let existing = findActiveSnapshotCurve(preset.id);
         if (existing) {
             removePhone(existing);
+        } else if (eqSession.editingPresetId === preset.id) {
+            resetEditorToDefaults({ clearScratchEQ: true });
         } else {
-            if (activeEditingPresetId === preset.id) {
-                activeEditingPresetId = null;
-                drawEQOverlay(0);
-            }
             renderSavedEQList();
         }
     }
@@ -2053,12 +2268,12 @@ function addExtra() {
 
         savedEQPresets.forEach(preset => {
             let isActive = !!findActiveSnapshotCurve(preset.id);
-            let isEditing = isActive && activeEditingPresetId === preset.id;
+            let isEditing = isActive && eqSession.editingPresetId === preset.id;
             let pill = document.createElement("div");
             pill.className = "eq-preset-pill" + (isActive ? " is-active" : "") + (isEditing ? " is-editing" : "");
             pill.setAttribute("data-eq-id", preset.id);
             pill.title = isEditing
-                ? "Editing on graph · Click to hide · Double-click to rename"
+                ? "Auto-saving edits · Click to deselect · Double-click to rename"
                 : (isActive ? "Click to focus in EQ editor · Double-click to rename" : "Click to load onto graph · Double-click to rename");
 
             let mainArea = document.createElement("div");
@@ -2082,18 +2297,6 @@ function addExtra() {
             let actions = document.createElement("div");
             actions.className = "eq-pill-actions";
 
-            let saveBtn = document.createElement("button");
-            saveBtn.type = "button";
-            saveBtn.className = "eq-pill-btn eq-pill-save";
-            saveBtn.title = "Overwrite this preset with current EQ & Balance";
-            saveBtn.setAttribute("aria-label", "Overwrite preset " + preset.name);
-            saveBtn.innerHTML = SVG_ICON.save;
-            saveBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                overwriteSavedPreset(preset, saveBtn);
-            });
-            saveBtn.addEventListener("dblclick", (e) => e.stopPropagation());
-
             let delBtn = document.createElement("button");
             delBtn.type = "button";
             delBtn.className = "eq-pill-btn eq-pill-delete";
@@ -2106,7 +2309,6 @@ function addExtra() {
             });
             delBtn.addEventListener("dblclick", (e) => e.stopPropagation());
 
-            actions.appendChild(saveBtn);
             actions.appendChild(delBtn);
 
             pill.appendChild(mainArea);
@@ -2122,7 +2324,7 @@ function addExtra() {
                     let plotted = findActiveSnapshotCurve(preset.id);
                     if (!plotted) {
                         activateSavedPreset(preset);
-                    } else if (activeEditingPresetId !== preset.id) {
+                    } else if (eqSession.editingPresetId !== preset.id) {
                         focusPlottedPreset(preset);
                     } else {
                         deselectSavedPreset(preset);
@@ -2159,8 +2361,10 @@ function addExtra() {
     }
 
     window.onEQSnapshotRemoved = function(removedId) {
-        if (activeEditingPresetId && activeEditingPresetId === removedId) {
-            activeEditingPresetId = null;
+        if (eqSession.editingPresetId && eqSession.editingPresetId === removedId) {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = null;
+            eqSession.editingPresetId = null;
             let remainingSnap = (typeof activePhones !== "undefined")
                 ? activePhones.find(p => p && p.isEQSnapshot && p.active && p.eqSnapshotId !== removedId)
                 : null;
@@ -2169,15 +2373,30 @@ function addExtra() {
                 focusPlottedPreset(remainingPreset);
                 return;
             }
+            let hasLiveScratchEQ = (typeof activePhones !== "undefined") &&
+                activePhones.some(p => p && p.eqParent && p.eqParent.eq === p && p.active && !p.isEQSnapshot);
+            if (!hasLiveScratchEQ) {
+                resetEditorToDefaults({ clearScratchEQ: false });
+                return;
+            }
             drawEQOverlay(0);
         }
         renderSavedEQList();
     };
 
+    window.onExclusiveEQCleared = function() {
+        if (eqSession.editingPresetId) return;
+        let hasAnyActiveEQ = (typeof activePhones !== "undefined") &&
+            activePhones.some(p => p && p.active && (p.isEQSnapshot || (p.eqParent && p.eqParent.eq === p)));
+        if (!hasAnyActiveEQ) {
+            resetEditorToDefaults({ clearScratchEQ: false });
+        }
+    };
+
     loadSavedEQState();
     renderSavedEQList();
 
-    // Save filters: saves unified CUSTOM EQ preset in sidebar + plots snapshot curve in bottom table
+    // Save filters: saves new CUSTOM EQ preset in sidebar + plots snapshot curve in bottom table
     document.querySelector("div.extra-eq button.save-filters").addEventListener("click", () => {
         saveCurrentScopeDOM();
         let balanceVal = getCurrentChannelBalanceValue();
@@ -2188,25 +2407,9 @@ function addExtra() {
             return;
         }
         flushPendingApplyEQ();
+        flushAutoSave();
 
-        let phoneSelected = eqPhoneSelect.value;
-        let phoneObj = phoneSelected && activePhones.filter(
-            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
-
-        if (!phoneObj && !userExplicitlyPickedSandbox && activeEditingPresetId) {
-            let activeSnap = findActiveSnapshotCurve(activeEditingPresetId);
-            if (activeSnap && !activeSnap.isSandboxEQ && activeSnap.eqBasePhone) {
-                phoneObj = activeSnap.eqBasePhone;
-            }
-        }
-
-        // If forking from an actively edited preset, revert that source preset on the graph back to its saved state
-        if (activeEditingPresetId) {
-            let prevPreset = savedEQPresets.find(x => x.id === activeEditingPresetId);
-            if (prevPreset) {
-                revertPresetCurveToSaved(prevPreset);
-            }
-        }
+        let phoneObj = eqSession.pickedSandbox ? null : resolveEditorBasePhone();
 
         // Remove any temporary scratch "<Model> EQ" curve so no duplicate curve stays on the graph
         activePhones
@@ -2218,9 +2421,9 @@ function addExtra() {
             id: "eq_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
             name: "CUSTOM EQ " + customEqCounter,
             scopes: {
-                LR: cloneFilterArray(scopeFilters.LR),
-                L: cloneFilterArray(scopeFilters.L),
-                R: cloneFilterArray(scopeFilters.R)
+                LR: cloneFilterArray(eqSession.scopes.LR),
+                L: cloneFilterArray(eqSession.scopes.L),
+                R: cloneFilterArray(eqSession.scopes.R)
             },
             balance: balanceVal,
             model: captureCurrentModelMeta(phoneObj || null)
@@ -2228,8 +2431,8 @@ function addExtra() {
         customEqCounter++;
         savedEQPresets.push(preset);
         persistSavedEQState();
-        activeEditingPresetId = preset.id;
-        mountSnapshotCurve(preset, phoneObj || null, isBypassed);
+        eqSession.editingPresetId = preset.id;
+        mountSnapshotCurve(preset, phoneObj || null, eqSession.bypassed);
         drawEQOverlay(0);
         renderSavedEQList(true);
         if (typeof window.trackFeatureUsed === "function") {
@@ -2250,7 +2453,7 @@ function addExtra() {
         reader.onload = (ev) => {
             let settings = ev.target.result;
             let parsed = { LR: [], L: [], R: [] };
-            let targetScope = eqScope;
+            let targetScope = eqSession.scope;
             let hasExplicitChannels = false;
 
             settings.split(/\r?\n/).forEach(rawLine => {
@@ -2292,16 +2495,19 @@ function addExtra() {
             trimTrailingEmpty(parsed.L);
             trimTrailingEmpty(parsed.R);
 
+            const assignImportedSlots = (arr) => arr.map((f, idx) => Object.assign({}, f, {
+                baselineSlot: idx < DEFAULT_EQ_FILTERS.length ? idx : null
+            }));
             let totalParsed = parsed.LR.length + parsed.L.length + parsed.R.length;
             if (totalParsed > 0) {
                 setBypassState(false, false);
                 if (hasExplicitChannels) {
-                    scopeFilters.LR = parsed.LR.length ? parsed.LR : cloneDefaultFilters();
-                    scopeFilters.L = parsed.L.length ? parsed.L : cloneDefaultFilters();
-                    scopeFilters.R = parsed.R.length ? parsed.R : cloneDefaultFilters();
-                    filtersToElem(scopeFilters[eqScope]);
+                    eqSession.scopes.LR = parsed.LR.length ? assignImportedSlots(parsed.LR) : cloneDefaultFilters();
+                    eqSession.scopes.L = parsed.L.length ? assignImportedSlots(parsed.L) : cloneDefaultFilters();
+                    eqSession.scopes.R = parsed.R.length ? assignImportedSlots(parsed.R) : cloneDefaultFilters();
+                    filtersToElem(eqSession.scopes[eqSession.scope]);
                 } else {
-                    filtersToElem(parsed[eqScope]);
+                    filtersToElem(assignImportedSlots(parsed[eqSession.scope]));
                 }
                 applyEQ();
             } else {
@@ -2319,9 +2525,7 @@ function addExtra() {
             alert("Please dial in at least one non-zero filter before export.");
             return;
         }
-        let phoneSelected = eqPhoneSelect.value;
-        let phoneObj = phoneSelected && activePhones.filter(
-            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
+        let phoneObj = resolveEditorBasePhone();
         let preamp = computeWorstCasePreamp(true);
         let settings = "Preamp: " + preamp.toFixed(1) + " dB\r\n";
 
@@ -2340,7 +2544,7 @@ function addExtra() {
             return out;
         };
 
-        let lrAll = scopeFilters.LR || [];
+        let lrAll = eqSession.scopes.LR || [];
         let lActive = getScopeFilters("L", false, true);
         let rActive = getScopeFilters("R", false, true);
 
@@ -2349,10 +2553,10 @@ function addExtra() {
                 settings += "Channel: all\r\n" + formatAPOBlock(lrAll);
             }
             if (lActive.length > 0) {
-                settings += "Channel: L\r\n" + formatAPOBlock(scopeFilters.L || []);
+                settings += "Channel: L\r\n" + formatAPOBlock(eqSession.scopes.L || []);
             }
             if (rActive.length > 0) {
-                settings += "Channel: R\r\n" + formatAPOBlock(scopeFilters.R || []);
+                settings += "Channel: R\r\n" + formatAPOBlock(eqSession.scopes.R || []);
             }
         } else {
             settings += formatAPOBlock(lrAll);
@@ -2377,9 +2581,7 @@ function addExtra() {
             alert("Please add at least one active non-zero filter before export.");
             return;
         }
-        let phoneSelected = eqPhoneSelect.value;
-        let phoneObj = phoneSelected && activePhones.filter(
-            p => !p.isPrefBounds && !p.isTarget && !p.isEQSnapshot && p.brand && (p.brand.name + " " + p.dispName == phoneSelected))[0];
+        let phoneObj = resolveEditorBasePhone();
         let graphicEQ = Equalizer.as_graphic_eq(filters);
         let settings = "GraphicEQ: " + graphicEQ.map(([f, gain]) =>
             f.toFixed(0) + " " + gain.toFixed(1)).join("; ");
@@ -2387,7 +2589,7 @@ function addExtra() {
         exportElem.href && URL.revokeObjectURL(exportElem.href);
         exportElem.href = URL.createObjectURL(new Blob([settings]));
         let baseName = phoneObj ? phoneObj.fullName.replace(/^Uploaded /, "") : "MIRElink EQ";
-        let scopeTag = (eqScope === "L" || eqScope === "R") ? (" " + eqScope) : "";
+        let scopeTag = (eqSession.scope === "L" || eqSession.scope === "R") ? (" " + eqSession.scope) : "";
         exportElem.download = baseName + scopeTag + " Graphic Filters.txt";
         exportElem.click();
         if (typeof window.trackGraphExported === "function") {
@@ -2404,9 +2606,9 @@ function addExtra() {
     // Graph Overlays & FFT Spectrum Controls
     if (btnEqOverlay) {
         btnEqOverlay.addEventListener("click", () => {
-            eqOverlayEnabled = !eqOverlayEnabled;
-            eqOverlayUserDismissed = !eqOverlayEnabled;
-            eqOverlayUserEnabled = eqOverlayEnabled;
+            eqSession.overlayEnabled = !eqSession.overlayEnabled;
+            eqSession.overlayDismissed = !eqSession.overlayEnabled;
+            eqSession.overlayUserEnabled = eqSession.overlayEnabled;
             syncEqOverlayButton();
             drawEQOverlay(0);
         });
@@ -2858,8 +3060,9 @@ function addExtra() {
     let volLeftInput = document.getElementById("vol-left");
     let volRightInput = document.getElementById("vol-right");
 
-    function applyChannelBalance(balValue) {
+    function applyChannelBalance(balValue, shouldAutoSave) {
         let bal = Math.max(-10, Math.min(10, parseFloat(balValue) || 0));
+        eqSession.balance = bal;
         let leftDb = bal > 0 ? -bal : 0;   // Sliding right attenuates Left
         let rightDb = bal < 0 ? bal : 0;   // Sliding left attenuates Right
         let leftGain = Math.pow(10, leftDb / 20);
@@ -2874,25 +3077,29 @@ function addExtra() {
         if (volLeftInput) volLeftInput.value = leftDb === 0 ? "0" : leftDb.toFixed(1);
         if (volRightInput) volRightInput.value = rightDb === 0 ? "0" : rightDb.toFixed(1);
         if (channelBalanceSlider) channelBalanceSlider.value = bal;
+
+        if (shouldAutoSave) {
+            scheduleAutoSave(false, false);
+        }
     }
 
     if (channelBalanceSlider) {
         channelBalanceSlider.addEventListener("input", () => {
-            applyChannelBalance(channelBalanceSlider.value);
+            applyChannelBalance(channelBalanceSlider.value, true);
         });
     }
 
     if (volLeftInput) {
         volLeftInput.addEventListener("input", () => {
             let v = Math.max(-10, Math.min(0, parseFloat(volLeftInput.value) || 0));
-            applyChannelBalance(-v); // e.g., -3 dB on Left => slider +3 toward Right
+            applyChannelBalance(-v, true); // e.g., -3 dB on Left => slider +3 toward Right
         });
     }
 
     if (volRightInput) {
         volRightInput.addEventListener("input", () => {
             let v = Math.max(-10, Math.min(0, parseFloat(volRightInput.value) || 0));
-            applyChannelBalance(v); // e.g., -3 dB on Right => slider -3 toward Left
+            applyChannelBalance(v, true); // e.g., -3 dB on Right => slider -3 toward Left
         });
     }
 
@@ -2923,8 +3130,8 @@ function addExtra() {
     function syncAudioGainTargets(immediate) {
         let state = computeAudioGainState();
         let now = audioContext.currentTime;
-        let dryTarget = (isBypassed || !state.hasActive) ? 1 : 0;
-        let wetTarget = (!isBypassed && state.hasActive) ? Math.pow(10, state.autoGainDb / 20) : 0;
+        let dryTarget = (eqSession.bypassed || !state.hasActive) ? 1 : 0;
+        let wetTarget = (!eqSession.bypassed && state.hasActive) ? Math.pow(10, state.autoGainDb / 20) : 0;
         let safetyTarget = Math.pow(10, state.sharedSafetyDb / 20);
 
         dryGain.gain.cancelScheduledValues(now);

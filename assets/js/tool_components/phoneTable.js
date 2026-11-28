@@ -8,6 +8,44 @@
 // shared global lexical environment.
 
 // --- Row styling + channel-box layout helpers ---
+function syncPinUI(p) {
+    if (!p) return;
+    let isPinned = !!p.pin;
+    // 1. Sync bottom control panel pin button
+    if (typeof table !== "undefined") {
+        table.selectAll("tr").filter(q => q === p).select(".button-pin")
+            .classed("selected", isPinned)
+            .attr("data-pinned", isPinned ? "true" : "false")
+            .attr("title", isPinned ? "Unpin graph" : "Pin graph");
+    }
+    // 2. Sync sidebar single-variant model row pin button
+    if (!p.isTarget && (!p.fileNames || p.fileNames.length <= 1)) {
+        doc.select("#phones").selectAll("div.phone-item")
+            .filter(q => q === p)
+            .select("button.phone-item-pin")
+            .classed("pinned", isPinned)
+            .attr("data-pinned", isPinned ? "true" : "false")
+            .attr("title", isPinned ? "Unpin graph" : "Pin graph");
+    }
+    // 3. Sync sidebar variant tree row pin button (multi-variant models)
+    let treeBase = p.copyOf || p;
+    if (!p.isTarget && treeBase && treeBase.fileNames && treeBase.fileNames.length > 1 && treeBase.treeOpen && typeof renderVariantTree === "function") {
+        renderVariantTree(treeBase);
+    }
+}
+
+function togglePhonePin(p) {
+    if (!p) return;
+    p.pin = !p.pin;
+    nextPN = null;
+    syncPinUI(p);
+    if (typeof userConfigApplicationActive !== "undefined" && !userConfigApplicationActive && typeof setUserConfig === "function") {
+        setUserConfig();
+    }
+}
+window.syncPinUI = syncPinUI;
+window.togglePhonePin = togglePhonePin;
+
 function setPhoneTr(phtr) {
     phtr.each(function (p) {
         if (!p) return;
@@ -24,10 +62,39 @@ function setPhoneTr(phtr) {
     });
     phtr.classed("phone-highlighted", p => p && p.highlight)
         .style("border-color", p => (p && p.highlight) ? getDivColor(p.activeId !== undefined ? p.activeId : p.id, 1, p.hexColor, p) : null);
-    phtr.filter(p => p && !p.isTarget)
+
+    let phoneItems = phtr.filter(p => p && !p.isTarget);
+
+    // Pin button directly on single-variant active model rows (multi-variant models pin on individual variant rows)
+    phoneItems.selectAll("button.phone-item-pin")
+        .data(p => (p && p.highlight && (!p.fileNames || p.fileNames.length <= 1)) ? [p] : [])
+        .join(
+            enterSel => enterSel.insert("button", ".phone-item-add")
+                .attr("type", "button")
+                .attr("class", "phone-item-pin")
+                .on("mousedown", function () {
+                    d3.event.stopPropagation();
+                    d3.event.preventDefault();
+                })
+                .on("click", function (p) {
+                    d3.event.stopPropagation();
+                    togglePhonePin(p);
+                }),
+            updateSel => updateSel,
+            exitSel => exitSel.remove()
+        )
+        .classed("pinned", p => !!(p && p.pin))
+        .attr("data-pinned", p => (p && p.pin) ? "true" : "false")
+        .attr("title", p => (p && p.pin) ? "Unpin graph" : "Pin graph");
+
+    phoneItems
         .select(".phone-item-add")
         .selectAll(".remove").data(p => (p && p.highlight) ? [p] : [])
         .join("span").attr("class", "remove").text("⊗")
+        .on("mousedown", () => {
+            d3.event.stopPropagation();
+            d3.event.preventDefault();
+        })
         .on("click", p => { d3.event.stopPropagation(); removeCopies(p); });
 }
 
@@ -240,16 +307,11 @@ function updatePhoneTable() {
         .html("<svg viewBox='-2.5 0 19 12'><use xlink:href='#hide-icon'></use></svg>")
         .on("click", toggleHide);
     actionsTd.append("span").attr("class", p => "button button-pin" + (p && p.pin ? " selected" : ""))
-        .attr("title", "Pin graph")
+        .attr("title", p => p && p.pin ? "Unpin graph" : "Pin graph")
         .attr("data-pinned", p => p && p.pin ? "true" : "false")
         .html("<svg viewBox='-135 -100 270 200'><use xlink:href='#pin-icon'></use></svg>")
-        .on("click",function(p){
-            // Toggle pin state
-            p.pin = !p.pin;
-            nextPN = null;
-            this.setAttribute("data-pinned", p.pin ? "true" : "false");
-            d3.select(this).classed("selected", p.pin);
-            if (!userConfigApplicationActive) setUserConfig();
+        .on("click", function(p) {
+            togglePhonePin(p);
         });
     actionsTd.append("span").attr("class","remove").text("")
         .attr("title", "Remove graph")
@@ -300,6 +362,11 @@ function updatePhoneTable() {
             .html("<svg viewBox='0 0 24 24'><use xlink:href='#save-icon'></svg>")
             .on("click", saveSquiggle);
     }
+
+    table.selectAll("tr").select(".button-pin")
+        .classed("selected", p => !!(p && p.pin))
+        .attr("data-pinned", p => p && p.pin ? "true" : "false")
+        .attr("title", p => p && p.pin ? "Unpin graph" : "Pin graph");
 
     syncPhoneTableColors();
 }
@@ -700,37 +767,17 @@ function addModel(t) {
         });
 }
 
-function updateVariant(p) {
+function updateVariant(p, exclusive) {
+    if (exclusive && typeof clearUnpinnedExcept === "function") {
+        clearUnpinnedExcept(p, { skipRender: true, noBaselineTransition: true });
+    }
+
     let tr = table.selectAll("tr").filter(q=>q===p);
     tr.attr("data-filename", p.fileName);
     tr.select(".phonename").text(p.dispName);
 
-    // Sync sibling comparator(s) when swapping variants in place onto a single-channel mode
-    if (!p.isTarget && !p.isPrefBounds && !p.eqParent && typeof activePhones !== "undefined") {
-        let comparePhones = activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent);
-        if (comparePhones.length >= 2) {
-            let pInfo = getAvailableChannelInfo(p);
-            if (pInfo.soloChannel) {
-                let targetLr = pInfo.soloChannel === "L" ? 0 : 1;
-                comparePhones.forEach(q => {
-                    if (q === p || q._userChannelOverride) return;
-                    let qInfo = getAvailableChannelInfo(q);
-                    if (qInfo.soloChannel !== null) return;
-                    let qSeat = "avg";
-                    if (pInfo.soloSeating != null && (q.copyOf || q) === (p.copyOf || p)) {
-                        let qSamples = pInfo.soloChannel === "L" ? qInfo.left : qInfo.right;
-                        if (qSamples.some(s => s.seatNum === pInfo.soloSeating)) {
-                            qSeat = String(pInfo.soloSeating);
-                        }
-                    }
-                    q._autoSynced = true;
-                    setCurves(q, false, targetLr, undefined, qSeat);
-                    if (q.eq && q.eq.active) {
-                        setCurves(q.eq, false, targetLr, undefined, qSeat);
-                    }
-                });
-            }
-        }
+    if (typeof reconcileChannelDefaults === "function") {
+        reconcileChannelDefaults();
     }
 
     let chTd = tr.select("td.channels");
@@ -738,6 +785,14 @@ function updateVariant(p) {
     chTd.call(addChannelControls);
     normalizePhone(p);
     updatePaths();
+    updatePhoneTable();
+    d3.selectAll("#phones .phone-item,.target").call(setPhoneTr);
+    if (!p.isTarget && p.fileNames) {
+        let treeBase = p.copyOf || p;
+        if (treeBase.treeOpen && typeof renderVariantTree === "function") {
+            renderVariantTree(treeBase);
+        }
+    }
     if (typeof window.trackPhoneViewed === "function") {
         window.trackPhoneViewed(p, "variant");
     }
@@ -745,38 +800,55 @@ function updateVariant(p) {
         window.updateEQPhoneSelect();
     }
 }
-function changeVariant(p, update, trigger) {
+function changeVariant(p, update, trigger, exclusive) {
     let fn = p.fileName,
-        ch = p.vars[fn];
+        ch = p.vars && p.vars[fn];
     function set(ch) {
-        let ap = (typeof activePhones !== "undefined")
-            ? activePhones.filter(q => !q.isTarget && !q.isPrefBounds && !q.eqParent)
-            : [];
-        let savedLr = p.lr;
-        let savedAvg = p.avg;
-        let savedSeating = p.seating;
-
-        // When swapping variants in place on a single-phone view (and user hasn't manually overridden),
-        // reset single-side seating carryovers so switching e.g. (ANC 100) -> base restores L+R AVG cleanly.
-        if (update === updateVariant && ap.length <= 1 && !p._userChannelOverride) {
-            delete p.channelState;
-            savedLr = undefined;
-            savedAvg = (p.eq && p.eq.active) ? !p.eq.hasChannelSplits : false;
-            savedSeating = "avg";
-        } else if (savedLr === undefined && !savedAvg && ap.length >= 2) {
-            savedLr = 1;
+        if (!ch) {
+            if (!trigger && typeof showGraphNotice === "function") {
+                showGraphNotice("Measurement files not found: " + (p.dispName || fn));
+            }
+            if (update === updateVariant && p._prevVariant) {
+                p.fileName = p._prevVariant.fileName;
+                p.dispName = p._prevVariant.dispName;
+                delete p._prevVariant;
+                let treeBase = p.copyOf || p;
+                if (treeBase && treeBase.treeOpen && typeof renderVariantTree === "function") {
+                    renderVariantTree(treeBase);
+                }
+            } else {
+                let base = p.copyOf;
+                if (base && base.objs) {
+                    base.objs = base.objs.filter(q => q !== p && q.active);
+                    if (base.objs.length === 0) delete base.objs;
+                }
+            }
+            return;
         }
-
-        p.rawChannels = ch; p.smooth = undefined;
+        delete p._prevVariant;
+        if (p.vars) p.vars[fn] = ch;
+        p.rawChannels = ch;
+        p.smooth = undefined;
         let cached = parsedResultCache.get(fn);
         if (cached) {
             p.sampleLabels = cached.sampleLabels;
             p.sampleSeatings = cached.sampleSeatings;
             p.nonStandardSmoothing = cached.nonStandardSmoothing;
         }
-        smoothPhone(p);
-        setCurves(p, savedAvg, savedLr, undefined, savedSeating);
-        update(p, 0, 0, trigger);
+        if (update === updateVariant) {
+            if (!p._userChannelOverride) {
+                delete p.channelState;
+                p.avg = false;
+                p.lr = undefined;
+                p.seating = undefined;
+            }
+            smoothPhone(p);
+            setCurves(p);
+            update(p, exclusive ? 1 : 0, 0, trigger);
+        } else {
+            smoothPhone(p);
+            update(p, exclusive ? 1 : 0, 0, trigger);
+        }
     }
     if (ch) {
         set(ch);
@@ -784,12 +856,22 @@ function changeVariant(p, update, trigger) {
         loadFiles(p, set);
     }
 }
-function showVariant(p, c, trigger) {
-    if (!p.objs) { p.objs = [p]; }
-    p.objs.push(c);
-    c.active=true; c.copyOf=p;
-    ["brand","dispBrand","fileNames","vars"].map(k=>c[k]=p[k]);
-    changeVariant(c, showPhone, trigger);
+function showVariant(p, c, trigger, exclusive) {
+    // Prevent duplicate variant copies for the same fileName
+    let existing = activePhones.find(q => q && q.active && (q === p || q.copyOf === p) && q.fileName === c.fileName);
+    if (existing) {
+        if (exclusive && typeof clearUnpinnedExcept === "function") {
+            clearUnpinnedExcept(existing);
+        }
+        return;
+    }
+    if (!p.objs) { p.objs = p.active ? [p] : []; }
+    if (!p.objs.some(q => q && q.fileName === c.fileName)) {
+        p.objs.push(c);
+    }
+    c.copyOf = p;
+    ["brand","dispBrand","fileNames","vars"].map(k => c[k] = p[k]);
+    changeVariant(c, showPhone, trigger, !!exclusive);
 }
 
 function cpCircles(svg) {
@@ -949,7 +1031,10 @@ function colorPhones() {
     if (typeof window.syncSavedEQPillColors === "function") {
         window.syncSavedEQPillColors();
     }
-    let c = p => p.active ? getDivColor(p.id, true, p.hexColor, p) : null;
+    let c = p => {
+        let m = activePhones.find(q => q === p || q.copyOf === p);
+        return m ? getDivColor(m.id, true, m.hexColor, m) : null;
+    };
     doc.select("#phones").selectAll("div.phone-item")
         .style("border-color", c);
     syncPhoneTableColors();
